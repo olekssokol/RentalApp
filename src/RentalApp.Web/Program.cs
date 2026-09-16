@@ -1,5 +1,6 @@
 using RentalApp.Application;
 using RentalApp.Infrastructure;
+using RentalApp.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
+
+await DatabaseSeeder.MigrateAndSeedAsync(app.Services);
 
 if (!app.Environment.IsDevelopment())
 {
