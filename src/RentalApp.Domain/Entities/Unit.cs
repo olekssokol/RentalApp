@@ -11,4 +11,7 @@ public class Unit : Entity
 
     public int UnitTypeId { get; set; }
     public UnitType UnitType { get; set; } = null!;
+
+    public ICollection<RentalApplication> Applications { get; set; } = new List<RentalApplication>();
+    public ICollection<Lease> Leases { get; set; } = new List<Lease>();
 }
