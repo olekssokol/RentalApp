@@ -1,0 +1,17 @@
+@model DeleteResidenceFormViewModel
+<div class="modal-header">
+    <h5 class="modal-title">Remove residence</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form asp-controller="Applications" asp-action="DeleteResidence" method="post" data-modal-form>
+    <div class="modal-body">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <input type="hidden" asp-for="ApplicationId" />
+        <input type="hidden" asp-for="Id" />
+        <p class="mb-0">Remove <span class="row-title">@Model.Address</span> from this application?</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Remove</button>
+    </div>
+</form>

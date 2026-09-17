@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using RentalApp.Infrastructure.Identity;
+using RentalApp.Web.Identity;
 
 namespace RentalApp.Web.Extensions;
 
@@ -13,5 +14,7 @@ public static class ClaimsPrincipalExtensions
         user.IsInRole(AppRoles.PropertyManager);
 
     public static string GetDisplayName(this ClaimsPrincipal user) =>
-        user.Identity?.Name ?? "User";
+        user.FindFirstValue(AppClaimTypes.FullName)
+        ?? user.Identity?.Name
+        ?? "User";
 }

@@ -1,0 +1,118 @@
+@model ApplicationWizardViewModel
+@{
+    ViewData["Title"] = $"Application #{Model.Id}";
+    var section = Model.DisplaySection;
+}
+
+@await Component.InvokeAsync("ApplicationHeader", new { propertyName = Model.PropertyName, unitNumber = Model.UnitNumber, status = Model.Status })
+
+<ol class="wizard-steps">
+    <li class="wizard-step @(section == ApplicationWizardSection.ApplicantInfo ? "is-active" : "") @(section > ApplicationWizardSection.ApplicantInfo ? "is-done" : "")">
+        <span class="wizard-step-index">1</span>
+        <span class="wizard-step-label">Applicant</span>
+        <span class="wizard-step-hint">Name and contact</span>
+    </li>
+    <li class="wizard-step @(section == ApplicationWizardSection.ResidenceHistory ? "is-active" : "") @(section > ApplicationWizardSection.ResidenceHistory ? "is-done" : "")">
+        <span class="wizard-step-index">2</span>
+        <span class="wizard-step-label">Residences</span>
+        <span class="wizard-step-hint">Where you have lived</span>
+    </li>
+    <li class="wizard-step @(section == ApplicationWizardSection.Summary ? "is-active" : "")">
+        <span class="wizard-step-index">3</span>
+        <span class="wizard-step-label">Summary</span>
+        <span class="wizard-step-hint">Review and submit</span>
+    </li>
+</ol>
+
+<div class="app-card mb-3">
+    @if (!Model.CanEdit && !Model.IsManager)
+    {
+        <div class="notice-banner">This application is read-only in its current status.</div>
+    }
+    else if (Model.IsManager)
+    {
+        <div class="notice-banner">You are viewing this file as a property manager.</div>
+    }
+
+    <form asp-action="Wizard" method="post">
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="CurrentSection" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        @if (section == ApplicationWizardSection.ApplicantInfo)
+        {
+            <partial name="Partials/_ApplicantInfo" model="Model" />
+        }
+        else if (section == ApplicationWizardSection.ResidenceHistory)
+        {
+            <partial name="Partials/_ResidenceHistory" model="Model" />
+        }
+        else
+        {
+            <partial name="Partials/_Summary" model="Model" />
+        }
+
+        <div class="d-flex flex-wrap justify-content-between gap-2 mt-4 pt-3 border-top">
+            <div class="d-flex gap-2 flex-wrap">
+                @if (Model.CanEdit && Model.CurrentSection != ApplicationWizardSection.ApplicantInfo)
+                {
+                    <button type="submit" name="Action" value="Back" class="btn btn-outline-secondary" formnovalidate>Back</button>
+                }
+                @if (!Model.CanEdit && Model.PreviousSection is { } previous)
+                {
+                    <a class="btn btn-outline-secondary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@previous">Previous</a>
+                }
+                <a class="btn btn-link px-0" asp-action="Index">Back to list</a>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                @if (Model.CanEdit && Model.CurrentSection != ApplicationWizardSection.Summary)
+                {
+                    <button type="submit" name="Action" value="Continue" class="btn btn-primary">Continue</button>
+                }
+                @if (!Model.CanEdit && Model.NextSection is { } next)
+                {
+                    <a class="btn btn-outline-primary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@next">Next</a>
+                }
+                @if (Model.CanEdit && Model.CurrentSection == ApplicationWizardSection.Summary && Model.ApplicantInfoSaved && Model.ResidenceHistorySaved)
+                {
+                    <button type="submit" name="Action" value="Submit" class="btn btn-success">Submit application</button>
+                }
+                @if (!Model.IsManager && (Model.Status == ApplicationStatus.Draft || Model.Status == ApplicationStatus.Submitted || Model.Status == ApplicationStatus.Returned))
+                {
+                    <button type="submit" formaction="@Url.Action("Withdraw")" class="btn btn-outline-danger" formnovalidate onclick="return confirm('Withdraw this application?');">Withdraw</button>
+                }
+                @if (Model.IsManager && Model.Status == ApplicationStatus.Submitted)
+                {
+                    <button type="button" class="btn btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = Model.Id })">Review</button>
+                }
+            </div>
+        </div>
+    </form>
+</div>
+
+@if (Model.IsManager && Model.StatusHistory.Count > 0)
+{
+    <div class="app-card">
+        <h2 class="h5 mb-3">Review history</h2>
+        <ol class="timeline">
+            @foreach (var h in Model.StatusHistory)
+            {
+                <li>
+                    <div class="d-flex justify-content-between gap-3 flex-wrap">
+                        <strong>@(h.FromStatus?.ToString() ?? "—") → @h.ToStatus</strong>
+                        <span class="text-muted">@h.ChangedAtUtc.ToLocalTime().ToString("g")</span>
+                    </div>
+                    <div>@h.ChangedByDisplayName</div>
+                    @if (!string.IsNullOrWhiteSpace(h.Comment))
+                    {
+                        <div class="text-muted">@h.Comment</div>
+                    }
+                </li>
+            }
+        </ol>
+    </div>
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

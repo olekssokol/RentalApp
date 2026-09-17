@@ -1,11 +1,15 @@
+using Microsoft.AspNetCore.Identity;
 using RentalApp.Application;
 using RentalApp.Infrastructure;
+using RentalApp.Infrastructure.Identity;
 using RentalApp.Infrastructure.Persistence;
+using RentalApp.Web.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, ApplicationUserClaimsPrincipalFactory>();
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();

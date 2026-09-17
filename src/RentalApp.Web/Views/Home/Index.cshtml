@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Home";
     var name = User.Identity?.IsAuthenticated == true ? User.GetDisplayName() : null;
 }
@@ -9,7 +9,7 @@
         <div class="app-card hero-copy">
             <p class="page-kicker">Rental applications</p>
             <h1 class="hero-title">A quieter way to apply for a home.</h1>
-            <p class="lead mb-0">Harbor Homes keeps property managers and applicants on one calm path.</p>
+            <p class="lead mb-0">Harbor Homes keeps property managers and applicants on one calm path: browse a unit, complete a short application, and review with a clear decision.</p>
             <div class="hero-actions">
                 <a class="btn btn-primary" asp-controller="Account" asp-action="Login">Log in</a>
                 <a class="btn btn-outline-secondary" asp-controller="Account" asp-action="Register">Create an account</a>
@@ -18,7 +18,11 @@
         <aside class="demo-card">
             <p class="page-kicker">Demo access</p>
             <h2 class="h4">Try it with seeded accounts</h2>
-            <p class="mb-0">Password: <code>Passw0rd!</code></p>
+            <p class="mb-3">Password for both: <code>Passw0rd!</code></p>
+            <ul class="mb-0">
+                <li class="mb-2"><strong>Property manager</strong><br /><code>pm1@rental.local</code></li>
+                <li><strong>Applicant</strong><br /><code>applicant1@rental.local</code></li>
+            </ul>
         </aside>
     </section>
 }
@@ -28,12 +32,23 @@ else if (User.IsInRole(AppRoles.PropertyManager))
         <div>
             <p class="page-kicker">Welcome back</p>
             <h1>Hello, @name</h1>
+            <p class="page-lede">Review applications or keep the property catalog current.</p>
         </div>
     </div>
-    <article class="dash-card">
-        <h2>Properties &amp; units</h2>
-        <a class="btn btn-primary" asp-controller="Properties" asp-action="Index">Manage properties</a>
-    </article>
+    <div class="dash-grid">
+        <article class="dash-card">
+            <p class="page-kicker">Portfolio</p>
+            <h2>Properties &amp; units</h2>
+            <p>Add buildings, keep unit types accurate, and open a unit when it is ready to lease.</p>
+            <a class="btn btn-primary" asp-controller="Properties" asp-action="Index">Manage properties</a>
+        </article>
+        <article class="dash-card">
+            <p class="page-kicker">Decisions</p>
+            <h2>Applications</h2>
+            <p>Filter submitted files, open the wizard, and approve, return, or deny with a comment.</p>
+            <a class="btn btn-outline-secondary" asp-controller="Applications" asp-action="Index">Review applications</a>
+        </article>
+    </div>
 }
 else
 {
@@ -41,10 +56,21 @@ else
         <div>
             <p class="page-kicker">Welcome back</p>
             <h1>Hello, @name</h1>
+            <p class="page-lede">Browse open units or continue an application you already started.</p>
         </div>
     </div>
-    <article class="dash-card">
-        <h2>Available units</h2>
-        <a class="btn btn-primary" asp-controller="Units" asp-action="Available">Browse units</a>
-    </article>
+    <div class="dash-grid">
+        <article class="dash-card">
+            <p class="page-kicker">Find a home</p>
+            <h2>Available units</h2>
+            <p>See open units with rent and layout, then start an application in a few short sections.</p>
+            <a class="btn btn-primary" asp-controller="Units" asp-action="Available">Browse units</a>
+        </article>
+        <article class="dash-card">
+            <p class="page-kicker">Your files</p>
+            <h2>My applications</h2>
+            <p>Pick up a draft, answer a return, or withdraw something that is no longer needed.</p>
+            <a class="btn btn-outline-secondary" asp-controller="Applications" asp-action="Index">View applications</a>
+        </article>
+    </div>
 }

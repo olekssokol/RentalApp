@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -17,25 +17,49 @@
     <header class="site-header">
         <nav class="navbar navbar-expand-md navbar-dark site-nav">
             <div class="container-xl">
-                <a class="navbar-brand" asp-controller="Home" asp-action="Index">Harbor Homes</a>
+                <a class="navbar-brand" asp-controller="Home" asp-action="Index">
+                    <span class="brand-mark" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 13V7.5L8 3l6 4.5V13H10V9H6v4H2Z" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    Harbor Homes
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
                 <div class="collapse navbar-collapse" id="mainNav">
                     <ul class="navbar-nav me-auto">
-                        @if (User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.PropertyManager))
+                        @if (User.Identity?.IsAuthenticated == true)
                         {
                             <li class="nav-item">
-                                <a class="nav-link @(currentController == "Properties" ? "active" : null)" asp-controller="Properties" asp-action="Index">Properties</a>
+                                <a class="nav-link @(currentController == "Applications" ? "active" : null)" asp-controller="Applications" asp-action="Index">Applications</a>
                             </li>
-                        }
-                        @if (User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Applicant))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link @(currentController == "Units" ? "active" : null)" asp-controller="Units" asp-action="Available">Available units</a>
-                            </li>
+                            @if (User.IsInRole(AppRoles.PropertyManager))
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link @(currentController == "Properties" ? "active" : null)" asp-controller="Properties" asp-action="Index">Properties</a>
+                                </li>
+                            }
+                            @if (User.IsInRole(AppRoles.Applicant))
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link @(currentController == "Units" ? "active" : null)" asp-controller="Units" asp-action="Available">Available units</a>
+                                </li>
+                            }
                         }
                     </ul>
                     <ul class="navbar-nav align-items-md-center gap-md-2">
                         @if (User.Identity?.IsAuthenticated == true)
                         {
+                            <li class="nav-item">
+                                <div class="user-chip me-md-2">
+                                    <div>
+                                        <div class="user-chip-name">@User.GetDisplayName()</div>
+                                        <span class="user-chip-role">@(User.IsManager() ? "Property manager" : "Applicant")</span>
+                                    </div>
+                                </div>
+                            </li>
                             <li class="nav-item">
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
                                     @Html.AntiForgeryToken()
@@ -46,7 +70,7 @@
                         else
                         {
                             <li class="nav-item">
-                                <a class="nav-link" asp-controller="Account" asp-action="Login">Log in</a>
+                                <a class="nav-link @(currentController == "Account" && ViewContext.RouteData.Values["action"]?.ToString() == "Login" ? "active" : null)" asp-controller="Account" asp-action="Login">Log in</a>
                             </li>
                             <li class="nav-item">
                                 <a class="btn btn-sm btn-outline-light" asp-controller="Account" asp-action="Register">Sign up</a>
@@ -79,7 +103,7 @@
     </div>
 
     <footer class="site-footer">
-        <div class="container-xl small">Harbor Homes</div>
+        <div class="container-xl small">Harbor Homes — rental applications for applicants and property managers</div>
     </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

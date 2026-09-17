@@ -1,0 +1,36 @@
+@model ApplicationWizardViewModel
+
+<h2 class="h5 mb-1">Summary</h2>
+<p class="page-lede mb-3">Confirm everything before you submit. You can still go back if something is missing.</p>
+
+<div class="summary-grid">
+    <section class="summary-block">
+        <h3>Applicant</h3>
+        <dl>
+            <dt>Name</dt><dd>@(Model.FullName ?? "—")</dd>
+            <dt>Phone</dt><dd>@(Model.Phone ?? "—")</dd>
+            <dt>Email</dt><dd>@(Model.Email ?? "—")</dd>
+            <dt>Address</dt><dd class="mb-0">@(Model.CurrentAddress ?? "—")</dd>
+        </dl>
+    </section>
+    <section class="summary-block">
+        <h3>Residences</h3>
+        @if (Model.Residences.Count == 0)
+        {
+            <p class="mb-0 text-muted">None added.</p>
+        }
+        else
+        {
+            <ul class="mb-0 ps-3">
+                @foreach (var r in Model.Residences)
+                {
+                    <li class="mb-2">
+                        <span class="row-title">@r.Address</span>
+                        <span class="row-sub">@r.LandlordName · @r.MoveInDate – @(r.MoveOutDate?.ToString() ?? "present")</span>
+                        <span class="row-sub">Landlord phone: @r.LandlordPhone</span>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>

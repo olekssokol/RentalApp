@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using RentalApp.Application.Applications;
 using RentalApp.Application.Units;
 using RentalApp.Infrastructure.Identity;
+using RentalApp.Web.Extensions;
 using RentalApp.Web.ViewModels.Units;
 
 namespace RentalApp.Web.Controllers;
@@ -11,14 +13,33 @@ namespace RentalApp.Web.Controllers;
 public class UnitsController : Controller
 {
     private readonly IUnitService _units;
+    private readonly IApplicationCommandService _applications;
 
-    public UnitsController(IUnitService units) => _units = units;
+    public UnitsController(IUnitService units, IApplicationCommandService applications)
+    {
+        _units = units;
+        _applications = applications;
+    }
 
     [Authorize(Roles = AppRoles.Applicant)]
     public async Task<IActionResult> Available(CancellationToken ct)
     {
         var units = await _units.GetAvailableAsync(ct);
         return View(units);
+    }
+
+    [Authorize(Roles = AppRoles.Applicant)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartApplication(int unitId, CancellationToken ct)
+    {
+        var result = await _applications.StartAsync(new StartApplicationCommand(User.GetUserId(), unitId, User.GetDisplayName()), ct);
+        if (result.IsFailure)
+        {
+            TempData["Error"] = result.Error;
+            return RedirectToAction(nameof(Available));
+        }
+
+        return RedirectToAction("Wizard", "Applications", new { id = result.Value });
     }
 
     [Authorize(Roles = AppRoles.PropertyManager)]

@@ -1,0 +1,106 @@
+@model ApplicationListViewModel
+@{
+    ViewData["Title"] = "Applications";
+}
+
+<div class="page-header">
+    <div>
+        <p class="page-kicker">@(Model.IsManager ? "Inbox" : "Your files")</p>
+        <h1>Applications</h1>
+        <p class="page-lede">@(Model.IsManager ? "Filter the queue, open a file, or review a submitted application." : "Track drafts, returns, and decisions in one list.")</p>
+    </div>
+</div>
+
+<form method="get" class="app-card mb-3">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" for="status">Status</label>
+            <select id="status" name="status" class="form-select">
+                <option value="">All statuses</option>
+                @foreach (ApplicationStatus s in Enum.GetValues<ApplicationStatus>())
+                {
+                    if (Model.Status == s)
+                    {
+                        <option value="@s" selected>@s</option>
+                    }
+                    else
+                    {
+                        <option value="@s">@s</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="propertyId">Property</label>
+            <select id="propertyId" name="propertyId" class="form-select">
+                <option value="">All properties</option>
+                @foreach (var p in Model.Properties)
+                {
+                    if (Model.PropertyId?.ToString() == p.Value)
+                    {
+                        <option value="@p.Value" selected>@p.Text</option>
+                    }
+                    else
+                    {
+                        <option value="@p.Value">@p.Text</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Clear</a>
+        </div>
+    </div>
+</form>
+
+<div class="app-card p-0 overflow-hidden">
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty-state">
+            <strong>No applications match</strong>
+            @(Model.IsManager ? "Try another status or property." : "Browse available units to start one.")
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Applicant</th>
+                        <th>Home</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td class="row-title">#@item.Id</td>
+                        <td>@item.ApplicantName</td>
+                        <td>
+                            <span>@item.PropertyName</span>
+                            <span class="row-sub">Unit @item.UnitNumber</span>
+                        </td>
+                        <td>@await Component.InvokeAsync("StatusBadge", new { status = item.Status })</td>
+                        <td>@item.UpdatedAtUtc.ToLocalTime().ToString("g")</td>
+                        <td>
+                            <div class="table-actions">
+                                <a class="btn btn-sm btn-outline-primary" asp-action="Wizard" asp-route-id="@item.Id">Open</a>
+                                @if (Model.IsManager && item.Status == ApplicationStatus.Submitted)
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = item.Id })">Review</button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

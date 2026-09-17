@@ -7,7 +7,7 @@
     <div>
         <p class="page-kicker">Browse</p>
         <h1>Available units</h1>
-        <p class="page-lede">Open homes currently available to lease.</p>
+        <p class="page-lede">Open homes you can apply for right now.</p>
     </div>
 </div>
 
@@ -33,6 +33,10 @@ else
                     <span class="pill pill-muted">@(u.Bedrooms == 0 ? "Studio" : $"{u.Bedrooms} bed")</span>
                     <span class="pill pill-muted">@u.UnitTypeName</span>
                 </div>
+                <form asp-action="StartApplication" method="post" class="mt-auto">
+                    <input type="hidden" name="unitId" value="@u.Id" />
+                    <button type="submit" class="btn btn-primary w-100">Apply</button>
+                </form>
             </article>
         }
     </div>

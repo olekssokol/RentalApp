@@ -1,0 +1,9 @@
+@model ApplicationHeaderModel
+<div class="page-header mb-3">
+    <div>
+        <p class="page-kicker">Application</p>
+        <h1>@Model.PropertyName</h1>
+        <p class="page-lede">Unit @Model.UnitNumber</p>
+    </div>
+    @await Component.InvokeAsync("StatusBadge", new { status = Model.Status })
+</div>
