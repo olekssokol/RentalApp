@@ -16,10 +16,71 @@ public class ApplicationRulesTests
         ApplicationStatus status, bool editable, bool submittable, bool withdrawable, bool reviewable, bool terminal)
     {
         Assert.Equal(editable, ApplicationRules.CanEditSections(status));
+        Assert.Equal(editable, ApplicationRules.EnsureCanEdit(status).IsSuccess);
         Assert.Equal(submittable, ApplicationRules.CanSubmit(status));
+        Assert.Equal(submittable, ApplicationRules.EnsureCanSubmit(status, true, true, false).IsSuccess);
         Assert.Equal(withdrawable, ApplicationRules.CanWithdraw(status));
         Assert.Equal(reviewable, ApplicationRules.CanReview(status));
+        Assert.Equal(reviewable, ApplicationRules.EnsureCanReview(status).IsSuccess);
         Assert.Equal(terminal, ApplicationRules.IsTerminal(status));
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void EnsureCanSubmit_SectionCompletion_RequiresBothSections(bool applicantSaved, bool residencesSaved, bool allowed)
+    {
+        var result = ApplicationRules.EnsureCanSubmit(ApplicationStatus.Draft, applicantSaved, residencesSaved, false);
+
+        Assert.Equal(allowed, result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(ApplicationStatus.Draft)]
+    [InlineData(ApplicationStatus.Returned)]
+    public void EnsureCanSubmit_EditableStatusWithActiveLease_ReturnsFailure(ApplicationStatus status)
+    {
+        var result = ApplicationRules.EnsureCanSubmit(status, true, true, true);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Theory]
+    [InlineData(ReviewOutcome.Approve, null, true)]
+    [InlineData(ReviewOutcome.Approve, "", true)]
+    [InlineData(ReviewOutcome.Approve, " \t\r\n", true)]
+    [InlineData(ReviewOutcome.Approve, "Approved", true)]
+    [InlineData(ReviewOutcome.Return, null, false)]
+    [InlineData(ReviewOutcome.Return, "", false)]
+    [InlineData(ReviewOutcome.Return, " \t\r\n", false)]
+    [InlineData(ReviewOutcome.Return, "Please correct your address", true)]
+    [InlineData(ReviewOutcome.Deny, null, false)]
+    [InlineData(ReviewOutcome.Deny, "", false)]
+    [InlineData(ReviewOutcome.Deny, " \t\r\n", false)]
+    [InlineData(ReviewOutcome.Deny, "Does not meet requirements", true)]
+    public void EnsureReviewComment_OutcomeAndComment_EnforcesRequirement(ReviewOutcome outcome, string? comment, bool allowed)
+    {
+        var result = ApplicationRules.EnsureReviewComment(outcome, comment);
+
+        Assert.Equal(allowed, result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(ApplicationStatus.Submitted, false, true)]
+    [InlineData(ApplicationStatus.Submitted, true, false)]
+    [InlineData(ApplicationStatus.Draft, false, false)]
+    [InlineData(ApplicationStatus.Returned, false, false)]
+    [InlineData(ApplicationStatus.Approved, false, false)]
+    [InlineData(ApplicationStatus.Denied, false, false)]
+    [InlineData(ApplicationStatus.Withdrawn, false, false)]
+    public void EnsureCanApprove_StatusAndAvailability_RequiresSubmittedAndAvailable(
+        ApplicationStatus status, bool activeLease, bool allowed)
+    {
+        var result = ApplicationRules.EnsureCanApprove(status, activeLease);
+
+        Assert.Equal(allowed, result.IsSuccess);
     }
 
     [Theory]

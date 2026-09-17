@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using RentalApp.Application.Applications;
 using RentalApp.Application.Properties;
 using RentalApp.Application.Units;
 
@@ -10,6 +11,8 @@ public static class DependencyInjection
     {
         services.AddScoped<IPropertyService, PropertyService>();
         services.AddScoped<IUnitService, UnitService>();
+        services.AddScoped<IApplicationQueryService, ApplicationQueryService>();
+        services.AddScoped<IApplicationCommandService, ApplicationCommandService>();
         return services;
     }
 }

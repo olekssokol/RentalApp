@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RentalApp.Application.Applications;
 using RentalApp.Application.Properties;
 using RentalApp.Application.Units;
+using RentalApp.Infrastructure.Applications;
 using RentalApp.Infrastructure.Identity;
 using RentalApp.Infrastructure.Persistence;
 using RentalApp.Infrastructure.Properties;
@@ -41,6 +43,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPropertyRepository, PropertyRepository>();
         services.AddScoped<IUnitRepository, UnitRepository>();
+        services.AddScoped<IRentalApplicationRepository, RentalApplicationRepository>();
 
         return services;
     }
