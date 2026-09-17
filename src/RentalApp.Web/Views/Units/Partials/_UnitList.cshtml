@@ -1,0 +1,54 @@
+@model IReadOnlyList<UnitDto>
+<div class="app-card p-0 overflow-hidden">
+    @if (Model.Count == 0)
+    {
+        <div class="empty-state">
+            <strong>No units yet</strong>
+            Add a unit to this property to start taking applications.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Unit</th>
+                        <th>Beds</th>
+                        <th>Rent</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var u in Model)
+                {
+                    <tr>
+                        <td class="row-title">@u.UnitNumber</td>
+                        <td>@u.Bedrooms</td>
+                        <td>@u.MonthlyRent.ToString("C")</td>
+                        <td>@u.UnitTypeName</td>
+                        <td>
+                            @if (u.IsAvailable)
+                            {
+                                <span class="pill pill-ok">Available</span>
+                            }
+                            else
+                            {
+                                <span class="pill pill-muted">Leased</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="table-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-modal-url="@Url.Action("EditModal", "Units", new { id = u.Id })">Edit</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-modal-url="@Url.Action("DeleteModal", "Units", new { id = u.Id })">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

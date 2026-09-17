@@ -1,15 +1,50 @@
 @{
     ViewData["Title"] = "Home";
+    var name = User.Identity?.IsAuthenticated == true ? User.GetDisplayName() : null;
 }
 
-<section class="hero">
-    <div class="app-card hero-copy">
-        <p class="page-kicker">Rental applications</p>
-        <h1 class="hero-title">A quieter way to apply for a home.</h1>
-        <p class="lead mb-0">Harbor Homes keeps property managers and applicants on one calm path.</p>
-        <div class="hero-actions">
-            <a class="btn btn-primary" asp-controller="Account" asp-action="Login">Log in</a>
-            <a class="btn btn-outline-secondary" asp-controller="Account" asp-action="Register">Create an account</a>
+@if (User.Identity?.IsAuthenticated != true)
+{
+    <section class="hero">
+        <div class="app-card hero-copy">
+            <p class="page-kicker">Rental applications</p>
+            <h1 class="hero-title">A quieter way to apply for a home.</h1>
+            <p class="lead mb-0">Harbor Homes keeps property managers and applicants on one calm path.</p>
+            <div class="hero-actions">
+                <a class="btn btn-primary" asp-controller="Account" asp-action="Login">Log in</a>
+                <a class="btn btn-outline-secondary" asp-controller="Account" asp-action="Register">Create an account</a>
+            </div>
+        </div>
+        <aside class="demo-card">
+            <p class="page-kicker">Demo access</p>
+            <h2 class="h4">Try it with seeded accounts</h2>
+            <p class="mb-0">Password: <code>Passw0rd!</code></p>
+        </aside>
+    </section>
+}
+else if (User.IsInRole(AppRoles.PropertyManager))
+{
+    <div class="page-header">
+        <div>
+            <p class="page-kicker">Welcome back</p>
+            <h1>Hello, @name</h1>
         </div>
     </div>
-</section>
+    <article class="dash-card">
+        <h2>Properties &amp; units</h2>
+        <a class="btn btn-primary" asp-controller="Properties" asp-action="Index">Manage properties</a>
+    </article>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <p class="page-kicker">Welcome back</p>
+            <h1>Hello, @name</h1>
+        </div>
+    </div>
+    <article class="dash-card">
+        <h2>Available units</h2>
+        <a class="btn btn-primary" asp-controller="Units" asp-action="Available">Browse units</a>
+    </article>
+}

@@ -1,0 +1,17 @@
+@model DeleteUnitFormViewModel
+<div class="modal-header">
+    <h5 class="modal-title">Delete unit</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form asp-controller="Units" asp-action="Delete" method="post" data-modal-form>
+    <div class="modal-body">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="PropertyId" />
+        <p class="mb-0">Delete unit <span class="row-title">@Model.UnitNumber</span>?</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </div>
+</form>

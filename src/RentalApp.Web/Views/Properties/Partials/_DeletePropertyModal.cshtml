@@ -1,0 +1,16 @@
+@model DeletePropertyFormViewModel
+<div class="modal-header">
+    <h5 class="modal-title">Delete property</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<form asp-controller="Properties" asp-action="Delete" method="post" data-modal-form>
+    <div class="modal-body">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <input type="hidden" asp-for="Id" />
+        <p class="mb-0">Delete <span class="row-title">@Model.Name</span>? Units on this property will be removed if the delete is allowed.</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </div>
+</form>

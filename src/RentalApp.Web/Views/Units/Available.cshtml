@@ -1,0 +1,39 @@
+@model IReadOnlyList<UnitDto>
+@{
+    ViewData["Title"] = "Available units";
+}
+
+<div class="page-header">
+    <div>
+        <p class="page-kicker">Browse</p>
+        <h1>Available units</h1>
+        <p class="page-lede">Open homes currently available to lease.</p>
+    </div>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="app-card">
+        <div class="empty-state">
+            <strong>Nothing open today</strong>
+            Check back later — leased units return here when a lease ends.
+        </div>
+    </div>
+}
+else
+{
+    <div class="unit-grid">
+        @foreach (var u in Model)
+        {
+            <article class="unit-card">
+                <div class="unit-card-rent">@u.MonthlyRent.ToString("C0") <span>/ month</span></div>
+                <h2>Unit @u.UnitNumber</h2>
+                <p class="mb-0">@u.PropertyName</p>
+                <div class="unit-meta">
+                    <span class="pill pill-muted">@(u.Bedrooms == 0 ? "Studio" : $"{u.Bedrooms} bed")</span>
+                    <span class="pill pill-muted">@u.UnitTypeName</span>
+                </div>
+            </article>
+        }
+    </div>
+}
