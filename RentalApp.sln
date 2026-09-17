@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.11.12210.170 insiders
@@ -15,6 +16,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RentalApp.UnitTests", "tests\RentalApp.UnitTests\RentalApp.UnitTests.csproj", "{79AB9389-331B-475E-A954-05FDC705DA8A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RentalApp.IntegrationTests", "tests\RentalApp.IntegrationTests\RentalApp.IntegrationTests.csproj", "{590E041C-1777-4B39-A11A-074D35E9125A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,6 +45,10 @@ Global
 		{79AB9389-331B-475E-A954-05FDC705DA8A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{79AB9389-331B-475E-A954-05FDC705DA8A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{79AB9389-331B-475E-A954-05FDC705DA8A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{590E041C-1777-4B39-A11A-074D35E9125A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{590E041C-1777-4B39-A11A-074D35E9125A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{590E041C-1777-4B39-A11A-074D35E9125A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{590E041C-1777-4B39-A11A-074D35E9125A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -52,6 +59,7 @@ Global
 		{89B53068-A90E-4392-A6C3-712D5AF0B1A8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{EA6F8251-DD07-4001-BC45-689159282355} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{79AB9389-331B-475E-A954-05FDC705DA8A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{590E041C-1777-4B39-A11A-074D35E9125A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6C4273D7-43DB-4FA8-9F14-C50F0D81C4BB}
