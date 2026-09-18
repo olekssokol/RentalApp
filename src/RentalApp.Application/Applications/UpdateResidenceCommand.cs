@@ -5,8 +5,8 @@ public record UpdateResidenceCommand(
     int ResidenceId,
     string UserId,
     bool IsManager,
-    string Address,
-    string LandlordName,
-    string LandlordPhone,
-    DateOnly MoveInDate,
+    string? Address,
+    string? LandlordName,
+    string? LandlordPhone,
+    DateOnly? MoveInDate,
     DateOnly? MoveOutDate);

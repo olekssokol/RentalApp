@@ -90,6 +90,7 @@ public class RentalApplicationRepository : IRentalApplicationRepository
 
     public Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default) =>
         _db.RentalApplications
+            .Include(a => a.Residences)
             .Include(a => a.Unit).ThenInclude(u => u.Leases)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 

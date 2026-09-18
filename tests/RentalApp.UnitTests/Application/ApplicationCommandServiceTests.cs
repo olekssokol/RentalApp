@@ -24,20 +24,20 @@ public class ApplicationCommandServiceTests
         var before = Snapshot(repository.Application);
         var service = new ApplicationCommandService(repository);
 
-        Result result = operation switch
+        var failed = operation switch
         {
-            "SaveApplicant" => await service.SaveApplicantInfoAsync(ValidApplicant("foreign")),
-            "SaveResidences" => await service.SaveResidenceHistoryAsync(new(1, "foreign", false, true)),
-            "AddResidence" => await service.AddResidenceAsync(new(1, "foreign", false, "Changed", "Landlord", "123", new(2020, 1, 1), null)),
-            "UpdateResidence" => await service.UpdateResidenceAsync(new(1, 1, "foreign", false, "Changed", "Landlord", "123", new(2020, 1, 1), null)),
-            "DeleteResidence" => await service.DeleteResidenceAsync(new(1, 1, "foreign", false)),
-            "Back" => await service.GoBackAsync(new(1, "foreign", false)),
-            "Submit" => await service.SubmitAsync(new(1, "foreign")),
-            "Withdraw" => await service.WithdrawAsync(new(1, "foreign")),
+            "SaveApplicant" => (await service.SaveApplicantInfoAsync(ValidApplicant("foreign"))).IsFailure,
+            "SaveResidences" => (await service.SaveResidenceHistoryAsync(new(1, "foreign", false, true))).IsFailure,
+            "AddResidence" => (await service.AddResidenceAsync(new(1, "foreign", false, "Changed", "Landlord", "123", new(2020, 1, 1), null))).IsFailure,
+            "UpdateResidence" => (await service.UpdateResidenceAsync(new(1, 1, "foreign", false, "Changed", "Landlord", "123", new(2020, 1, 1), null))).IsFailure,
+            "DeleteResidence" => (await service.DeleteResidenceAsync(new(1, 1, "foreign", false))).IsFailure,
+            "Back" => (await service.GoBackAsync(new(1, "foreign", false))).IsFailure,
+            "Submit" => (await service.SubmitAsync(new(1, "foreign"))).IsFailure,
+            "Withdraw" => (await service.WithdrawAsync(new(1, "foreign"))).IsFailure,
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
 
-        Assert.True(result.IsFailure);
+        Assert.True(failed);
         Assert.Equal(before, Snapshot(repository.Application));
         Assert.Equal(0, repository.SaveCount);
         Assert.Empty(repository.History);
@@ -50,6 +50,7 @@ public class ApplicationCommandServiceTests
     {
         var repository = new ApplicationRepositoryFake();
         repository.Application.CurrentSection = section;
+        repository.Application.Residences.Add(Residence());
         var service = new ApplicationCommandService(repository);
 
         var result = await service.SubmitAsync(new(1, "owner"));
@@ -68,11 +69,11 @@ public class ApplicationCommandServiceTests
     [InlineData("CurrentAddress", 501)]
     [InlineData("InvalidEmail", 0)]
     [InlineData("BlankName", 0)]
-    public async Task SaveApplicantInfoAsync_InvalidInput_DoesNotSaveOrAdvance(string field, int length)
+    public async Task SaveApplicantInfoAsync_InvalidInput_PersistsWithoutAdvancing(string field, int length)
     {
         var repository = new ApplicationRepositoryFake();
         repository.Application.CurrentSection = ApplicationWizardSection.ApplicantInfo;
-        var before = Snapshot(repository.Application);
+        repository.Application.ApplicantInfoSaved = true;
         var service = new ApplicationCommandService(repository);
         var valid = ValidApplicant();
         var command = field switch
@@ -88,9 +89,33 @@ public class ApplicationCommandServiceTests
 
         var result = await service.SaveApplicantInfoAsync(command);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(before, Snapshot(repository.Application));
-        Assert.Equal(0, repository.SaveCount);
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.IsValid);
+        Assert.NotEmpty(result.Value.FieldErrors);
+        Assert.False(repository.Application.ApplicantInfoSaved);
+        Assert.Equal(ApplicationWizardSection.ApplicantInfo, repository.Application.CurrentSection);
+        Assert.True(repository.SaveCount > 0);
+        Assert.Equal(ApplicationSectionRulesNormalize(command.FullName), repository.Application.FullName);
+    }
+
+    [Fact]
+    public async Task SaveApplicantInfoAsync_ValidThenInvalid_ResetsSavedFlag()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.CurrentSection = ApplicationWizardSection.ApplicantInfo;
+        repository.Application.ApplicantInfoSaved = false;
+        var service = new ApplicationCommandService(repository);
+
+        var valid = await service.SaveApplicantInfoAsync(ValidApplicant() with { Advance = false });
+        Assert.True(valid.Value!.IsValid);
+        Assert.True(repository.Application.ApplicantInfoSaved);
+
+        var invalid = await service.SaveApplicantInfoAsync(ValidApplicant() with { FullName = "", Advance = true });
+        Assert.True(invalid.IsSuccess);
+        Assert.False(invalid.Value!.IsValid);
+        Assert.False(repository.Application.ApplicantInfoSaved);
+        Assert.Equal(ApplicationWizardSection.ApplicantInfo, repository.Application.CurrentSection);
+        Assert.Null(repository.Application.FullName);
     }
 
     [Fact]
@@ -108,6 +133,7 @@ public class ApplicationCommandServiceTests
         });
 
         Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.IsValid);
         Assert.Equal("New applicant", repository.Application.FullName);
         Assert.Equal("555-0111", repository.Application.Phone);
         Assert.Equal("New address", repository.Application.CurrentAddress);
@@ -117,23 +143,24 @@ public class ApplicationCommandServiceTests
         Assert.True(repository.SaveCount > 0);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ResidenceCommand_DefaultMoveInDate_DoesNotAddOrOverwriteResidence(bool update)
+    [Fact]
+    public async Task AddResidenceAsync_InvalidFields_PersistsWithIndexedErrors()
     {
         var repository = new ApplicationRepositoryFake();
-        repository.Application.Residences.Add(Residence());
-        var before = Snapshot(repository.Application);
+        repository.Application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
+        repository.Application.ResidenceHistorySaved = true;
         var service = new ApplicationCommandService(repository);
 
-        Result result = update
-            ? await service.UpdateResidenceAsync(new(1, 1, "owner", false, "Changed", "New landlord", "123", default, null))
-            : await service.AddResidenceAsync(new(1, "owner", false, "Changed", "New landlord", "123", default, null));
+        var result = await service.AddResidenceAsync(new(1, "owner", false, "", "Landlord", "123", null, null));
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(before, Snapshot(repository.Application));
-        Assert.Equal(0, repository.SaveCount);
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.IsValid);
+        Assert.Contains("Residences[0].Address", result.Value.FieldErrors.Keys);
+        Assert.Contains("Residences[0].MoveInDate", result.Value.FieldErrors.Keys);
+        Assert.False(repository.Application.ResidenceHistorySaved);
+        Assert.Single(repository.Application.Residences);
+        Assert.Null(Assert.Single(repository.Application.Residences).Address);
+        Assert.True(repository.SaveCount > 0);
     }
 
     [Theory]
@@ -145,14 +172,55 @@ public class ApplicationCommandServiceTests
         repository.Application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
         repository.Application.ResidenceHistorySaved = false;
         if (hasResidence) repository.Application.Residences.Add(Residence());
+        var updatedAt = repository.Application.UpdatedAtUtc;
         var service = new ApplicationCommandService(repository);
 
         var result = await service.SaveResidenceHistoryAsync(new(1, "owner", false, true));
 
-        Assert.Equal(hasResidence, result.IsSuccess);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(hasResidence, result.Value!.IsValid);
         Assert.Equal(hasResidence, repository.Application.ResidenceHistorySaved);
         Assert.Equal(hasResidence ? ApplicationWizardSection.Summary : ApplicationWizardSection.ResidenceHistory, repository.Application.CurrentSection);
-        Assert.Equal(hasResidence, repository.SaveCount > 0);
+        if (hasResidence)
+        {
+            Assert.True(repository.SaveCount > 0);
+        }
+        else
+        {
+            Assert.Equal(0, repository.SaveCount);
+            Assert.Equal(updatedAt, repository.Application.UpdatedAtUtc);
+            Assert.Contains("Residences", result.Value.FieldErrors.Keys);
+        }
+    }
+
+    [Fact]
+    public async Task SubmitAsync_StaleSavedFlagsWithInvalidData_Rejects()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.FullName = null;
+        repository.Application.ApplicantInfoSaved = true;
+        repository.Application.ResidenceHistorySaved = true;
+        repository.Application.Residences.Add(Residence());
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.SubmitAsync(new(1, "owner"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ApplicationStatus.Draft, repository.Application.Status);
+        Assert.Equal(0, repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_ValidPersistedState_Succeeds()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Residences.Add(Residence());
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.SubmitAsync(new(1, "owner"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ApplicationStatus.Submitted, repository.Application.Status);
     }
 
     [Theory]
@@ -185,6 +253,7 @@ public class ApplicationCommandServiceTests
     {
         var repository = new ApplicationRepositoryFake();
         repository.Application.Status = status;
+        repository.Application.Residences.Add(Residence());
         var service = new ApplicationCommandService(repository);
 
         var result = await service.SubmitAsync(new(1, "owner"));
@@ -336,6 +405,61 @@ public class ApplicationCommandServiceTests
     }
 
     [Fact]
+    public async Task SaveApplicantInfoAsync_FixInvalid_ClearsErrorsAndAdvances()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.CurrentSection = ApplicationWizardSection.ApplicantInfo;
+        repository.Application.ApplicantInfoSaved = false;
+        var service = new ApplicationCommandService(repository);
+
+        var invalid = await service.SaveApplicantInfoAsync(ValidApplicant() with { FullName = "", Advance = true });
+        Assert.False(invalid.Value!.IsValid);
+        Assert.False(repository.Application.ApplicantInfoSaved);
+
+        var fixedSave = await service.SaveApplicantInfoAsync(ValidApplicant());
+        Assert.True(fixedSave.Value!.IsValid);
+        Assert.Empty(fixedSave.Value.FieldErrors);
+        Assert.True(repository.Application.ApplicantInfoSaved);
+        Assert.Equal(ApplicationWizardSection.ResidenceHistory, repository.Application.CurrentSection);
+    }
+
+    [Fact]
+    public async Task UpdateResidenceAsync_InvalidEdit_ResetsResidenceHistorySaved()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
+        repository.Application.Residences.Add(Residence());
+        repository.Application.ResidenceHistorySaved = true;
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.UpdateResidenceAsync(
+            new(1, 1, "owner", false, "", "Landlord", "555", new DateOnly(2020, 1, 1), null));
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.IsValid);
+        Assert.Contains("Residences[0].Address", result.Value.FieldErrors.Keys);
+        Assert.False(repository.Application.ResidenceHistorySaved);
+        Assert.Null(repository.Application.Residences.Single().Address);
+    }
+
+    [Fact]
+    public async Task GoBackAsync_DoesNotValidateOrRewriteApplicantFields()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
+        repository.Application.FullName = null;
+        repository.Application.ApplicantInfoSaved = false;
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.GoBackAsync(new(1, "owner", false));
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(repository.Application.FullName);
+        Assert.False(repository.Application.ApplicantInfoSaved);
+        Assert.Equal(ApplicationWizardSection.ApplicantInfo, repository.Application.CurrentSection);
+    }
+
+    [Fact]
     public async Task StartAsync_AvailableUnit_CreatesDraftAndIdentifiesCreator()
     {
         var repository = new ApplicationRepositoryFake();
@@ -356,6 +480,9 @@ public class ApplicationCommandServiceTests
         Assert.Equal("owner", history.ChangedByUserId);
         Assert.Equal("Alex Applicant", history.ChangedByDisplayName);
     }
+
+    private static string? ApplicationSectionRulesNormalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static SaveApplicantInfoCommand ValidApplicant(string user = "owner") =>
         new(1, user, false, "New applicant", "555-0111", "applicant@example.test", "New address", true);

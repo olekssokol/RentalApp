@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using RentalApp.Application.Applications;
 using RentalApp.Domain.Entities;
+using RentalApp.Domain.Services;
 using RentalApp.Infrastructure.Identity;
 
 namespace RentalApp.Infrastructure.Persistence;
@@ -53,10 +54,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         {
             e.Property(x => x.ApplicantUserId).HasMaxLength(450).IsRequired();
             e.Property(x => x.ClaimedByUserId).HasMaxLength(450);
-            e.Property(x => x.FullName).HasMaxLength(200);
-            e.Property(x => x.Phone).HasMaxLength(50);
-            e.Property(x => x.Email).HasMaxLength(256);
-            e.Property(x => x.CurrentAddress).HasMaxLength(500);
+            e.Property(x => x.FullName).HasMaxLength(ApplicationSectionRules.FullNameStorageLength);
+            e.Property(x => x.Phone).HasMaxLength(ApplicationSectionRules.PhoneStorageLength);
+            e.Property(x => x.Email).HasMaxLength(ApplicationSectionRules.EmailStorageLength);
+            e.Property(x => x.CurrentAddress).HasMaxLength(ApplicationSectionRules.CurrentAddressStorageLength);
             e.HasOne(x => x.Unit).WithMany(u => u.Applications).HasForeignKey(x => x.UnitId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.ApplicantUserId);
@@ -64,9 +65,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
         builder.Entity<ResidenceHistory>(e =>
         {
-            e.Property(x => x.Address).HasMaxLength(500).IsRequired();
-            e.Property(x => x.LandlordName).HasMaxLength(200).IsRequired();
-            e.Property(x => x.LandlordPhone).HasMaxLength(50).IsRequired();
+            e.Property(x => x.Address).HasMaxLength(ApplicationSectionRules.ResidenceAddressStorageLength);
+            e.Property(x => x.LandlordName).HasMaxLength(ApplicationSectionRules.LandlordNameStorageLength);
+            e.Property(x => x.LandlordPhone).HasMaxLength(ApplicationSectionRules.LandlordPhoneStorageLength);
             e.HasOne(x => x.RentalApplication).WithMany(a => a.Residences).HasForeignKey(x => x.RentalApplicationId).OnDelete(DeleteBehavior.Cascade);
         });
 

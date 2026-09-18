@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using RentalApp.Domain.Common;
 using RentalApp.Domain.Entities;
 using RentalApp.Domain.Enums;
@@ -38,73 +37,82 @@ public class ApplicationCommandService : IApplicationCommandService
         return Result.Success(application.Id);
     }
 
-    public async Task<Result> SaveApplicantInfoAsync(SaveApplicantInfoCommand command, CancellationToken ct = default)
+    public async Task<Result<SaveSectionResult>> SaveApplicantInfoAsync(SaveApplicantInfoCommand command, CancellationToken ct = default)
     {
         var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
         if (application is null)
-            return Result.Failure("Application not found.");
+            return Result.Failure<SaveSectionResult>("Application not found.");
 
         var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
         if (access.IsFailure)
-            return access;
+            return Result.Failure<SaveSectionResult>(access.Error!);
 
         var edit = ApplicationRules.EnsureCanEdit(application.Status);
         if (edit.IsFailure)
-            return edit;
+            return Result.Failure<SaveSectionResult>(edit.Error!);
 
-        if (string.IsNullOrWhiteSpace(command.FullName) || string.IsNullOrWhiteSpace(command.Phone) ||
-            string.IsNullOrWhiteSpace(command.Email) || string.IsNullOrWhiteSpace(command.CurrentAddress))
-            return Result.Failure("All applicant information fields are required.");
+        var fullName = ApplicationSectionRules.NormalizeOptional(command.FullName);
+        var phone = ApplicationSectionRules.NormalizeOptional(command.Phone);
+        var email = ApplicationSectionRules.NormalizeOptional(command.Email);
+        var currentAddress = ApplicationSectionRules.NormalizeOptional(command.CurrentAddress);
 
-        if (command.FullName.Length > 200)
-            return Result.Failure("Full name cannot exceed 200 characters.");
-        if (command.Phone.Length > 50)
-            return Result.Failure("Phone cannot exceed 50 characters.");
-        if (command.Email.Length > 256)
-            return Result.Failure("Email cannot exceed 256 characters.");
-        if (command.CurrentAddress.Length > 500)
-            return Result.Failure("Current address cannot exceed 500 characters.");
-        if (!new EmailAddressAttribute().IsValid(command.Email))
-            return Result.Failure("Enter a valid email address.");
+        var storage = EnsureApplicantStorage(fullName, phone, email, currentAddress);
+        if (storage.IsFailure)
+            return Result.Failure<SaveSectionResult>(storage.Error!);
 
-        application.FullName = command.FullName.Trim();
-        application.Phone = command.Phone.Trim();
-        application.Email = command.Email.Trim();
-        application.CurrentAddress = command.CurrentAddress.Trim();
-        application.ApplicantInfoSaved = true;
+        application.FullName = fullName;
+        application.Phone = phone;
+        application.Email = email;
+        application.CurrentAddress = currentAddress;
+
+        var errors = ApplicationSectionRules.ValidateApplicantInfo(fullName, phone, email, currentAddress);
+        var isValid = errors.Count == 0;
+        application.ApplicantInfoSaved = isValid;
         application.UpdatedAtUtc = DateTime.UtcNow;
 
-        if (command.Advance)
+        if (isValid && command.Advance)
             application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
 
         await _applications.SaveChangesAsync(ct);
-        return Result.Success();
+        return Result.Success(isValid ? SaveSectionResult.Valid() : SaveSectionResult.Invalid(errors));
     }
 
-    public async Task<Result> SaveResidenceHistoryAsync(SaveResidenceHistoryCommand command, CancellationToken ct = default)
+    public async Task<Result<SaveSectionResult>> SaveResidenceHistoryAsync(SaveResidenceHistoryCommand command, CancellationToken ct = default)
     {
         var application = await _applications.GetWithResidencesAsync(command.ApplicationId, ct);
         if (application is null)
-            return Result.Failure("Application not found.");
+            return Result.Failure<SaveSectionResult>("Application not found.");
 
         var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
         if (access.IsFailure)
-            return access;
+            return Result.Failure<SaveSectionResult>(access.Error!);
 
         var edit = ApplicationRules.EnsureCanEdit(application.Status);
         if (edit.IsFailure)
-            return edit;
+            return Result.Failure<SaveSectionResult>(edit.Error!);
 
-        if (application.Residences.Count == 0)
-            return Result.Failure("Add at least one prior residence before continuing.");
+        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
+        var isValid = errors.Count == 0;
+        var wasSaved = application.ResidenceHistorySaved;
+        application.ResidenceHistorySaved = isValid;
 
-        application.ResidenceHistorySaved = true;
-        application.UpdatedAtUtc = DateTime.UtcNow;
-        if (command.Advance)
-            application.CurrentSection = ApplicationWizardSection.Summary;
+        if (isValid)
+        {
+            application.UpdatedAtUtc = DateTime.UtcNow;
+            if (command.Advance)
+                application.CurrentSection = ApplicationWizardSection.Summary;
+            await _applications.SaveChangesAsync(ct);
+            return Result.Success(SaveSectionResult.Valid());
+        }
 
-        await _applications.SaveChangesAsync(ct);
-        return Result.Success();
+        // Invalid: stay on section. Persist only when the progress flag must flip true → false.
+        if (wasSaved)
+        {
+            application.UpdatedAtUtc = DateTime.UtcNow;
+            await _applications.SaveChangesAsync(ct);
+        }
+
+        return Result.Success(SaveSectionResult.Invalid(errors));
     }
 
     public async Task<Result> GoBackAsync(GoBackCommand command, CancellationToken ct = default)
@@ -144,10 +152,18 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application.CurrentSection != ApplicationWizardSection.Summary)
             return Result.Failure("Submit is only available from the summary.");
 
+        var blockers = ApplicationSectionRules.GetSubmissionBlockers(
+            application.FullName,
+            application.Phone,
+            application.Email,
+            application.CurrentAddress,
+            ToResidenceInputs(application.Residences));
+        if (blockers.Count > 0)
+            return Result.Failure("Fix the validation issues on the summary before submitting.");
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var hasLease = UnitAvailability.HasActiveLease(application.Unit.Leases, today);
-        var check = ApplicationRules.EnsureCanSubmit(
-            application.Status, application.ApplicantInfoSaved, application.ResidenceHistorySaved, hasLease);
+        var check = ApplicationRules.EnsureCanSubmit(application.Status, hasLease);
         if (check.IsFailure)
             return check;
 
@@ -180,67 +196,118 @@ public class ApplicationCommandService : IApplicationCommandService
         return Result.Success();
     }
 
-    public async Task<Result<int>> AddResidenceAsync(AddResidenceCommand command, CancellationToken ct = default)
+    public async Task<Result<ResidenceSaveResult>> AddResidenceAsync(AddResidenceCommand command, CancellationToken ct = default)
     {
-        var application = await GetEditableApplicationAsync(command.ApplicationId, command.UserId, command.IsManager, ct);
-        if (application.IsFailure)
-            return Result.Failure<int>(application.Error!);
+        var application = await _applications.GetWithResidencesAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure<ResidenceSaveResult>("Application not found.");
 
-        var validation = ValidateResidence(command.Address, command.LandlordName, command.LandlordPhone, command.MoveInDate, command.MoveOutDate);
-        if (validation.IsFailure)
-            return Result.Failure<int>(validation.Error!);
+        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        if (access.IsFailure)
+            return Result.Failure<ResidenceSaveResult>(access.Error!);
+
+        var edit = ApplicationRules.EnsureCanEdit(application.Status);
+        if (edit.IsFailure)
+            return Result.Failure<ResidenceSaveResult>(edit.Error!);
+
+        var address = ApplicationSectionRules.NormalizeOptional(command.Address);
+        var landlordName = ApplicationSectionRules.NormalizeOptional(command.LandlordName);
+        var landlordPhone = ApplicationSectionRules.NormalizeOptional(command.LandlordPhone);
+
+        var storage = EnsureResidenceStorage(address, landlordName, landlordPhone);
+        if (storage.IsFailure)
+            return Result.Failure<ResidenceSaveResult>(storage.Error!);
 
         var residence = new ResidenceHistory
         {
             RentalApplicationId = command.ApplicationId,
-            Address = command.Address.Trim(),
-            LandlordName = command.LandlordName.Trim(),
-            LandlordPhone = command.LandlordPhone.Trim(),
+            Address = address,
+            LandlordName = landlordName,
+            LandlordPhone = landlordPhone,
             MoveInDate = command.MoveInDate,
             MoveOutDate = command.MoveOutDate
         };
         await _applications.AddResidenceAsync(residence, ct);
-        application.Value!.UpdatedAtUtc = DateTime.UtcNow;
+
+        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
+        var isValid = errors.Count == 0;
+        application.ResidenceHistorySaved = isValid;
+        application.UpdatedAtUtc = DateTime.UtcNow;
         await _applications.SaveChangesAsync(ct);
-        return Result.Success(residence.Id);
+
+        return Result.Success(new ResidenceSaveResult(residence.Id, isValid, errors));
     }
 
-    public async Task<Result> UpdateResidenceAsync(UpdateResidenceCommand command, CancellationToken ct = default)
+    public async Task<Result<SaveSectionResult>> UpdateResidenceAsync(UpdateResidenceCommand command, CancellationToken ct = default)
     {
-        var application = await GetEditableApplicationAsync(command.ApplicationId, command.UserId, command.IsManager, ct);
-        if (application.IsFailure)
-            return Result.Failure(application.Error!);
+        var application = await _applications.GetWithResidencesAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure<SaveSectionResult>("Application not found.");
 
-        var validation = ValidateResidence(command.Address, command.LandlordName, command.LandlordPhone, command.MoveInDate, command.MoveOutDate);
-        if (validation.IsFailure)
-            return validation;
+        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        if (access.IsFailure)
+            return Result.Failure<SaveSectionResult>(access.Error!);
 
-        var residence = await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
+        var edit = ApplicationRules.EnsureCanEdit(application.Status);
+        if (edit.IsFailure)
+            return Result.Failure<SaveSectionResult>(edit.Error!);
+
+        var residence = application.Residences.FirstOrDefault(r => r.Id == command.ResidenceId)
+            ?? await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
         if (residence is null)
-            return Result.Failure("Residence not found.");
+            return Result.Failure<SaveSectionResult>("Residence not found.");
 
-        residence.Address = command.Address.Trim();
-        residence.LandlordName = command.LandlordName.Trim();
-        residence.LandlordPhone = command.LandlordPhone.Trim();
+        var address = ApplicationSectionRules.NormalizeOptional(command.Address);
+        var landlordName = ApplicationSectionRules.NormalizeOptional(command.LandlordName);
+        var landlordPhone = ApplicationSectionRules.NormalizeOptional(command.LandlordPhone);
+
+        var storage = EnsureResidenceStorage(address, landlordName, landlordPhone);
+        if (storage.IsFailure)
+            return Result.Failure<SaveSectionResult>(storage.Error!);
+
+        residence.Address = address;
+        residence.LandlordName = landlordName;
+        residence.LandlordPhone = landlordPhone;
         residence.MoveInDate = command.MoveInDate;
         residence.MoveOutDate = command.MoveOutDate;
-        application.Value!.UpdatedAtUtc = DateTime.UtcNow;
+
+        if (!application.Residences.Any(r => r.Id == residence.Id))
+            application.Residences.Add(residence);
+
+        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
+        var isValid = errors.Count == 0;
+        application.ResidenceHistorySaved = isValid;
+        application.UpdatedAtUtc = DateTime.UtcNow;
         await _applications.SaveChangesAsync(ct);
-        return Result.Success();
+
+        return Result.Success(isValid ? SaveSectionResult.Valid() : SaveSectionResult.Invalid(errors));
     }
 
     public async Task<Result> DeleteResidenceAsync(DeleteResidenceCommand command, CancellationToken ct = default)
     {
-        var application = await GetEditableApplicationAsync(command.ApplicationId, command.UserId, command.IsManager, ct);
-        if (application.IsFailure)
-            return Result.Failure(application.Error!);
+        var application = await _applications.GetWithResidencesAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure("Application not found.");
 
-        var residence = await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
+        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        if (access.IsFailure)
+            return access;
+
+        var edit = ApplicationRules.EnsureCanEdit(application.Status);
+        if (edit.IsFailure)
+            return edit;
+
+        var residence = application.Residences.FirstOrDefault(r => r.Id == command.ResidenceId)
+            ?? await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
         if (residence is null)
             return Result.Failure("Residence not found.");
 
         _applications.RemoveResidence(residence);
-        application.Value!.UpdatedAtUtc = DateTime.UtcNow;
+        application.Residences.Remove(residence);
+
+        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
+        application.ResidenceHistorySaved = errors.Count == 0;
+        application.UpdatedAtUtc = DateTime.UtcNow;
         await _applications.SaveChangesAsync(ct);
         return Result.Success();
     }
@@ -399,36 +466,34 @@ public class ApplicationCommandService : IApplicationCommandService
             : Result.Failure("You do not own this application.");
     }
 
-    private async Task<Result<RentalApplication>> GetEditableApplicationAsync(
-        int applicationId, string userId, bool isManager, CancellationToken ct)
+    private static IReadOnlyList<ResidenceInput> ToResidenceInputs(IEnumerable<ResidenceHistory> residences) =>
+        residences
+            .OrderBy(r => r.MoveInDate ?? DateOnly.MaxValue)
+            .ThenBy(r => r.Id)
+            .Select(r => new ResidenceInput(r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
+            .ToList();
+
+    private static Result EnsureApplicantStorage(string? fullName, string? phone, string? email, string? currentAddress)
     {
-        var application = await _applications.GetByIdAsync(applicationId, ct);
-        if (application is null)
-            return Result.Failure<RentalApplication>("Application not found.");
-
-        var access = EnsureApplicantAccess(application, userId, isManager);
-        if (access.IsFailure)
-            return Result.Failure<RentalApplication>(access.Error!);
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return Result.Failure<RentalApplication>(edit.Error!);
-
-        return Result.Success(application);
+        if (fullName?.Length > ApplicationSectionRules.FullNameStorageLength)
+            return Result.Failure("Full name exceeds the maximum allowed length.");
+        if (phone?.Length > ApplicationSectionRules.PhoneStorageLength)
+            return Result.Failure("Phone exceeds the maximum allowed length.");
+        if (email?.Length > ApplicationSectionRules.EmailStorageLength)
+            return Result.Failure("Email exceeds the maximum allowed length.");
+        if (currentAddress?.Length > ApplicationSectionRules.CurrentAddressStorageLength)
+            return Result.Failure("Current address exceeds the maximum allowed length.");
+        return Result.Success();
     }
 
-    private static Result ValidateResidence(
-        string address, string landlordName, string landlordPhone, DateOnly moveIn, DateOnly? moveOut)
+    private static Result EnsureResidenceStorage(string? address, string? landlordName, string? landlordPhone)
     {
-        if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(landlordName) || string.IsNullOrWhiteSpace(landlordPhone))
-            return Result.Failure("Address, landlord name, and landlord phone are required.");
-
-        if (moveIn == DateOnly.MinValue)
-            return Result.Failure("Move-in date is required.");
-
-        if (moveOut.HasValue && moveOut.Value < moveIn)
-            return Result.Failure("Move-out date cannot be before move-in date.");
-
+        if (address?.Length > ApplicationSectionRules.ResidenceAddressStorageLength)
+            return Result.Failure("Address exceeds the maximum allowed length.");
+        if (landlordName?.Length > ApplicationSectionRules.LandlordNameStorageLength)
+            return Result.Failure("Landlord name exceeds the maximum allowed length.");
+        if (landlordPhone?.Length > ApplicationSectionRules.LandlordPhoneStorageLength)
+            return Result.Failure("Landlord phone exceeds the maximum allowed length.");
         return Result.Success();
     }
 

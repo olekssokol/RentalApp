@@ -163,20 +163,28 @@ public class ApplicationsController : Controller
 
         if (detail.CurrentSection == ApplicationWizardSection.ApplicantInfo)
         {
-            var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
-            vm.FullName = model.FullName;
-            vm.Phone = model.Phone;
-            vm.Email = model.Email;
-            vm.CurrentAddress = model.CurrentAddress;
-
-            if (!ModelState.IsValid)
-                return View(vm);
-
             var save = await _commands.SaveApplicantInfoAsync(
-                new SaveApplicantInfoCommand(model.Id, userId, isManager, model.FullName!, model.Phone!, model.Email!, model.CurrentAddress!, Advance: true), ct);
+                new SaveApplicantInfoCommand(model.Id, userId, isManager, model.FullName, model.Phone, model.Email, model.CurrentAddress, Advance: true), ct);
             if (save.IsFailure)
             {
+                var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
+                vm.FullName = model.FullName;
+                vm.Phone = model.Phone;
+                vm.Email = model.Email;
+                vm.CurrentAddress = model.CurrentAddress;
                 ModelState.AddModelError(string.Empty, save.Error!);
+                return View(vm);
+            }
+
+            if (!save.Value!.IsValid)
+            {
+                var refreshed = await GetDetailAsync(model.Id, ct);
+                var vm = ApplicationWizardViewModel.From(refreshed!, isManager, userId);
+                vm.FullName = model.FullName;
+                vm.Phone = model.Phone;
+                vm.Email = model.Email;
+                vm.CurrentAddress = model.CurrentAddress;
+                AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
         }
@@ -188,6 +196,14 @@ public class ApplicationsController : Controller
             {
                 var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
                 ModelState.AddModelError(string.Empty, save.Error!);
+                return View(vm);
+            }
+
+            if (!save.Value!.IsValid)
+            {
+                var refreshed = await GetDetailAsync(model.Id, ct);
+                var vm = ApplicationWizardViewModel.From(refreshed!, isManager, userId);
+                AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
         }
@@ -241,32 +257,43 @@ public class ApplicationsController : Controller
         if (!detail.CanEdit || User.IsManager())
             return Forbid();
 
-        if (model.MoveInDate == DateOnly.MinValue)
-            ModelState.AddModelError(nameof(model.MoveInDate), "Move-in date is required.");
-
-        if (!ModelState.IsValid)
-            return PartialView("Partials/_ResidenceModal", model);
-
         var userId = User.GetUserId();
         var isManager = User.IsManager();
-        Result result;
 
         if (model.Id is null)
         {
             var create = await _commands.AddResidenceAsync(
-                new AddResidenceCommand(model.ApplicationId, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate!.Value, model.MoveOutDate), ct);
-            result = create.IsSuccess ? Result.Success() : Result.Failure(create.Error!);
+                new AddResidenceCommand(model.ApplicationId, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate, model.MoveOutDate), ct);
+            if (create.IsFailure)
+            {
+                ModelState.AddModelError(string.Empty, create.Error!);
+                return PartialView("Partials/_ResidenceModal", model);
+            }
+
+            if (!create.Value!.IsValid)
+            {
+                model.Id = create.Value.ResidenceId;
+                var refreshed = await GetDetailAsync(model.ApplicationId, ct);
+                AddResidenceModalFieldErrors(create.Value.FieldErrors, create.Value.ResidenceId, refreshed!.Residences);
+                return PartialView("Partials/_ResidenceModal", model);
+            }
         }
         else
         {
-            result = await _commands.UpdateResidenceAsync(
-                new UpdateResidenceCommand(model.ApplicationId, model.Id.Value, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate!.Value, model.MoveOutDate), ct);
-        }
+            var update = await _commands.UpdateResidenceAsync(
+                new UpdateResidenceCommand(model.ApplicationId, model.Id.Value, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate, model.MoveOutDate), ct);
+            if (update.IsFailure)
+            {
+                ModelState.AddModelError(string.Empty, update.Error!);
+                return PartialView("Partials/_ResidenceModal", model);
+            }
 
-        if (result.IsFailure)
-        {
-            ModelState.AddModelError(string.Empty, result.Error!);
-            return PartialView("Partials/_ResidenceModal", model);
+            if (!update.Value!.IsValid)
+            {
+                var refreshed = await GetDetailAsync(model.ApplicationId, ct);
+                AddResidenceModalFieldErrors(update.Value.FieldErrors, model.Id.Value, refreshed!.Residences);
+                return PartialView("Partials/_ResidenceModal", model);
+            }
         }
 
         return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId }) });
@@ -452,6 +479,46 @@ public class ApplicationsController : Controller
 
     private Task<ApplicationDetailDto?> GetDetailAsync(int id, CancellationToken ct) =>
         _queries.GetAsync(id, User.GetUserId(), User.IsManager(), ct);
+
+    private void AddFieldErrors(IReadOnlyDictionary<string, string[]> fieldErrors)
+    {
+        foreach (var (key, messages) in fieldErrors)
+        {
+            foreach (var message in messages)
+                ModelState.AddModelError(key, message);
+        }
+    }
+
+    private void AddResidenceModalFieldErrors(
+        IReadOnlyDictionary<string, string[]> fieldErrors,
+        int residenceId,
+        IReadOnlyList<ResidenceDto> residences)
+    {
+        var index = -1;
+        for (var i = 0; i < residences.Count; i++)
+        {
+            if (residences[i].Id == residenceId)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        var prefix = $"Residences[{index}].";
+        foreach (var (key, messages) in fieldErrors)
+        {
+            string formKey;
+            if (index >= 0 && key.StartsWith(prefix, StringComparison.Ordinal))
+                formKey = key[prefix.Length..];
+            else if (key.StartsWith("Residences[", StringComparison.Ordinal))
+                continue;
+            else
+                formKey = key;
+
+            foreach (var message in messages)
+                ModelState.AddModelError(formKey, message);
+        }
+    }
 
     private static PropertyManagerNotesViewModel BuildNotesViewModel(
         int applicationId, IReadOnlyList<PropertyManagerNoteDto> notes) =>

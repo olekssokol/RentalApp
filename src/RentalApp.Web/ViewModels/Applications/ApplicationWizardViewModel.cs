@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using RentalApp.Application.Applications;
 using RentalApp.Domain.Enums;
+using RentalApp.Domain.Services;
 
 namespace RentalApp.Web.ViewModels.Applications;
 
@@ -21,22 +22,26 @@ public class ApplicationWizardViewModel
     public bool CanReview { get; set; }
     public string? ClaimedByDisplayName { get; set; }
 
-    [Required, MaxLength(200), Display(Name = "Full name")]
+    [Display(Name = "Full name")]
     public string? FullName { get; set; }
 
-    [Required, MaxLength(50)]
     public string? Phone { get; set; }
 
-    [Required, MaxLength(256), EmailAddress]
     public string? Email { get; set; }
 
-    [Required, MaxLength(500), Display(Name = "Current address")]
+    [Display(Name = "Current address")]
     public string? CurrentAddress { get; set; }
 
     public IReadOnlyList<ResidenceDto> Residences { get; set; } = [];
     public IReadOnlyList<StatusHistoryDto> StatusHistory { get; set; } = [];
+    public IReadOnlyList<SubmissionBlocker> SubmissionBlockers { get; set; } = [];
 
     public string? Action { get; set; }
+
+    public bool CanSubmit =>
+        CanEdit
+        && CurrentSection == ApplicationWizardSection.Summary
+        && SubmissionBlockers.Count == 0;
 
     public ApplicationWizardSection? PreviousSection =>
         DisplaySection == ApplicationWizardSection.ApplicantInfo ? null : DisplaySection - 1;
@@ -76,7 +81,8 @@ public class ApplicationWizardViewModel
             Email = detail.Email,
             CurrentAddress = detail.CurrentAddress,
             Residences = detail.Residences,
-            StatusHistory = detail.StatusHistory
+            StatusHistory = detail.StatusHistory,
+            SubmissionBlockers = detail.SubmissionBlockers
         };
     }
 

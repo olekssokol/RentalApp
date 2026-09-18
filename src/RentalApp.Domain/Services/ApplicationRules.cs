@@ -27,13 +27,10 @@ public static class ApplicationRules
             : Result.Failure("This application can no longer be edited.");
     }
 
-    public static Result EnsureCanSubmit(ApplicationStatus status, bool applicantInfoSaved, bool residenceHistorySaved, bool unitHasActiveLease)
+    public static Result EnsureCanSubmit(ApplicationStatus status, bool unitHasActiveLease)
     {
         if (!CanSubmit(status))
             return Result.Failure("This application cannot be submitted in its current status.");
-
-        if (!applicantInfoSaved || !residenceHistorySaved)
-            return Result.Failure("Both application sections must be saved before submit.");
 
         if (unitHasActiveLease)
             return Result.Failure("This unit already has an active lease and cannot accept a new application submission.");

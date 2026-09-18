@@ -19,7 +19,7 @@ public class ApplicationRulesTests
         Assert.Equal(editable, ApplicationRules.CanEditSections(status));
         Assert.Equal(editable, ApplicationRules.EnsureCanEdit(status).IsSuccess);
         Assert.Equal(submittable, ApplicationRules.CanSubmit(status));
-        Assert.Equal(submittable, ApplicationRules.EnsureCanSubmit(status, true, true, false).IsSuccess);
+        Assert.Equal(submittable, ApplicationRules.EnsureCanSubmit(status, false).IsSuccess);
         Assert.Equal(withdrawable, ApplicationRules.CanWithdraw(status));
         Assert.Equal(claimable, ApplicationRules.CanClaim(status));
         Assert.Equal(claimable, ApplicationRules.EnsureCanClaim(status).IsSuccess);
@@ -27,23 +27,11 @@ public class ApplicationRulesTests
     }
 
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(true, true, true)]
-    public void EnsureCanSubmit_SectionCompletion_RequiresBothSections(bool applicantSaved, bool residencesSaved, bool allowed)
-    {
-        var result = ApplicationRules.EnsureCanSubmit(ApplicationStatus.Draft, applicantSaved, residencesSaved, false);
-
-        Assert.Equal(allowed, result.IsSuccess);
-    }
-
-    [Theory]
     [InlineData(ApplicationStatus.Draft)]
     [InlineData(ApplicationStatus.Returned)]
     public void EnsureCanSubmit_EditableStatusWithActiveLease_ReturnsFailure(ApplicationStatus status)
     {
-        var result = ApplicationRules.EnsureCanSubmit(status, true, true, true);
+        var result = ApplicationRules.EnsureCanSubmit(status, true);
 
         Assert.True(result.IsFailure);
     }

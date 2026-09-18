@@ -3,6 +3,36 @@
 <h2 class="h5 mb-1">Summary</h2>
 <p class="page-lede mb-3">Confirm everything before you submit. You can still go back if something is missing.</p>
 
+@if (Model.SubmissionBlockers.Count > 0)
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>Submission blocked</strong>
+        <p class="mb-2">Fix the items below before you can submit.</p>
+        @foreach (var group in Model.SubmissionBlockers.GroupBy(b => b.Section))
+        {
+            <div class="mb-2">
+                <div class="fw-semibold">
+                    @(group.Key == ApplicationWizardSection.ApplicantInfo ? "Applicant information" : "Residence history")
+                    @if (Model.IsManager)
+                    {
+                        <a class="ms-2 fw-normal" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@group.Key">View section</a>
+                    }
+                    else if (Model.CanEdit)
+                    {
+                        <span class="ms-2 fw-normal text-muted">Use Back to edit</span>
+                    }
+                </div>
+                <ul class="mb-0 ps-3">
+                    @foreach (var blocker in group)
+                    {
+                        <li>@blocker.Field: @blocker.Message</li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}
+
 <div class="summary-grid">
     <section class="summary-block">
         <h3>Applicant</h3>
@@ -25,9 +55,9 @@
                 @foreach (var r in Model.Residences)
                 {
                     <li class="mb-2">
-                        <span class="row-title">@r.Address</span>
-                        <span class="row-sub">@r.LandlordName · @r.MoveInDate – @(r.MoveOutDate?.ToString() ?? "present")</span>
-                        <span class="row-sub">Landlord phone: @r.LandlordPhone</span>
+                        <span class="row-title">@(r.Address ?? "—")</span>
+                        <span class="row-sub">@(r.LandlordName ?? "—") · @(r.MoveInDate?.ToString() ?? "—") – @(r.MoveOutDate?.ToString() ?? "present")</span>
+                        <span class="row-sub">Landlord phone: @(r.LandlordPhone ?? "—")</span>
                     </li>
                 }
             </ul>

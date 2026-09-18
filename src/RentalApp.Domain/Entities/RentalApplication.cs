@@ -20,6 +20,7 @@ public class RentalApplication : Entity
     public string? Email { get; set; }
     public string? CurrentAddress { get; set; }
 
+    // Latest persisted version of that section passed ApplicationSectionRules (progress only; Submit recalculates).
     public bool ApplicantInfoSaved { get; set; }
     public bool ResidenceHistorySaved { get; set; }
 

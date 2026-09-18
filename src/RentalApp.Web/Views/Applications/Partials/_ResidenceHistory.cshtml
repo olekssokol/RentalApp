@@ -11,6 +11,11 @@
     }
 </div>
 
+@if (ViewData.ModelState["Residences"]?.Errors.Count > 0)
+{
+    <div class="text-danger mb-3">@ViewData.ModelState["Residences"]!.Errors.First().ErrorMessage</div>
+}
+
 @if (Model.Residences.Count == 0)
 {
     <div class="empty-state py-4">
@@ -33,14 +38,49 @@ else
                 </tr>
             </thead>
             <tbody>
+            @{
+                var index = 0;
+            }
             @foreach (var r in Model.Residences)
             {
-                <tr>
-                    <td class="row-title">@r.Address</td>
-                    <td>@r.LandlordName</td>
-                    <td>@r.LandlordPhone</td>
-                    <td>@r.MoveInDate</td>
-                    <td>@(r.MoveOutDate?.ToString() ?? "Present")</td>
+                var rowPrefix = $"Residences[{index}]";
+                var hasRowErrors = ViewData.ModelState.Keys.Any(k => k.StartsWith(rowPrefix + ".", StringComparison.Ordinal));
+                <tr class="@(hasRowErrors ? "table-warning" : null)">
+                    <td class="row-title">
+                        @(r.Address ?? "—")
+                        @foreach (var err in ViewData.ModelState[$"{rowPrefix}.Address"]?.Errors ?? [])
+                        {
+                            <span class="d-block text-danger small">@err.ErrorMessage</span>
+                        }
+                    </td>
+                    <td>
+                        @(r.LandlordName ?? "—")
+                        @foreach (var err in ViewData.ModelState[$"{rowPrefix}.LandlordName"]?.Errors ?? [])
+                        {
+                            <span class="d-block text-danger small">@err.ErrorMessage</span>
+                        }
+                    </td>
+                    <td>
+                        @(r.LandlordPhone ?? "—")
+                        @foreach (var err in ViewData.ModelState[$"{rowPrefix}.LandlordPhone"]?.Errors ?? [])
+                        {
+                            <span class="d-block text-danger small">@err.ErrorMessage</span>
+                        }
+                    </td>
+                    <td>
+                        @(r.MoveInDate?.ToString() ?? "—")
+                        @foreach (var err in ViewData.ModelState[$"{rowPrefix}.MoveInDate"]?.Errors ?? [])
+                        {
+                            <span class="d-block text-danger small">@err.ErrorMessage</span>
+                        }
+                    </td>
+                    <td>
+                        @(r.MoveOutDate?.ToString() ?? "Present")
+                        @foreach (var err in ViewData.ModelState[$"{rowPrefix}.MoveOutDate"]?.Errors ?? [])
+                        {
+                            <span class="d-block text-danger small">@err.ErrorMessage</span>
+                        }
+                    </td>
                     <td>
                         @if (Model.CanEdit)
                         {
@@ -51,6 +91,7 @@ else
                         }
                     </td>
                 </tr>
+                index++;
             }
             </tbody>
         </table>

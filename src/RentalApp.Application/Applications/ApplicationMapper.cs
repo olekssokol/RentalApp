@@ -6,8 +6,19 @@ namespace RentalApp.Application.Applications;
 
 internal static class ApplicationMapper
 {
-    public static ApplicationDetailDto ToDetail(RentalApplication application) =>
-        new(
+    public static ApplicationDetailDto ToDetail(RentalApplication application)
+    {
+        var residences = application.Residences
+            .OrderBy(r => r.MoveInDate ?? DateOnly.MaxValue)
+            .ThenBy(r => r.Id)
+            .Select(r => new ResidenceDto(r.Id, r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
+            .ToList();
+
+        var residenceInputs = residences
+            .Select(r => new ResidenceInput(r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
+            .ToList();
+
+        return new(
             application.Id,
             application.Status,
             application.CurrentSection,
@@ -25,14 +36,18 @@ internal static class ApplicationMapper
             application.ClaimedByUserId,
             application.ClaimedAtUtc,
             ResolveClaimedByDisplayName(application),
-            application.Residences
-                .OrderBy(r => r.MoveInDate)
-                .Select(r => new ResidenceDto(r.Id, r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
-                .ToList(),
+            residences,
             application.StatusHistory
                 .OrderByDescending(h => h.ChangedAtUtc)
                 .Select(h => new StatusHistoryDto(h.FromStatus, h.ToStatus, h.ChangedByDisplayName, h.Comment, h.ChangedAtUtc))
-                .ToList());
+                .ToList(),
+            ApplicationSectionRules.GetSubmissionBlockers(
+                application.FullName,
+                application.Phone,
+                application.Email,
+                application.CurrentAddress,
+                residenceInputs));
+    }
 
     private static string? ResolveClaimedByDisplayName(RentalApplication application)
     {

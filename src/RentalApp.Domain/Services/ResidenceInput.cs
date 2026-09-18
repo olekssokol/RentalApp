@@ -1,7 +1,6 @@
-namespace RentalApp.Application.Applications;
+namespace RentalApp.Domain.Services;
 
-public record ResidenceDto(
-    int Id,
+public sealed record ResidenceInput(
     string? Address,
     string? LandlordName,
     string? LandlordPhone,

@@ -7,16 +7,15 @@ public class ResidenceFormViewModel
     public int ApplicationId { get; set; }
     public int? Id { get; set; }
 
-    [Required, MaxLength(500)]
-    public string Address { get; set; } = string.Empty;
+    public string? Address { get; set; }
 
-    [Required, MaxLength(200), Display(Name = "Landlord name")]
-    public string LandlordName { get; set; } = string.Empty;
+    [Display(Name = "Landlord name")]
+    public string? LandlordName { get; set; }
 
-    [Required, MaxLength(50), Display(Name = "Landlord phone")]
-    public string LandlordPhone { get; set; } = string.Empty;
+    [Display(Name = "Landlord phone")]
+    public string? LandlordPhone { get; set; }
 
-    [Required, Display(Name = "Move-in date")]
+    [Display(Name = "Move-in date")]
     [DataType(DataType.Date)]
     public DateOnly? MoveInDate { get; set; }
 

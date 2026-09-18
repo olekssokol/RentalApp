@@ -1,4 +1,5 @@
 using RentalApp.Domain.Enums;
+using RentalApp.Domain.Services;
 
 namespace RentalApp.Application.Applications;
 
@@ -21,4 +22,5 @@ public record ApplicationDetailDto(
     DateTime? ClaimedAtUtc,
     string? ClaimedByDisplayName,
     IReadOnlyList<ResidenceDto> Residences,
-    IReadOnlyList<StatusHistoryDto> StatusHistory);
+    IReadOnlyList<StatusHistoryDto> StatusHistory,
+    IReadOnlyList<SubmissionBlocker> SubmissionBlockers);
