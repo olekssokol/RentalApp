@@ -52,6 +52,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<RentalApplication>(e =>
         {
             e.Property(x => x.ApplicantUserId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.ClaimedByUserId).HasMaxLength(450);
             e.Property(x => x.FullName).HasMaxLength(200);
             e.Property(x => x.Phone).HasMaxLength(50);
             e.Property(x => x.Email).HasMaxLength(256);

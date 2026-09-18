@@ -329,6 +329,7 @@ h1, h2, .display-6, .hero-title {
 .status-approved { background: #e4f3ea; color: var(--hh-ok); }
 .status-denied { background: #f8e4e1; color: var(--hh-danger); }
 .status-withdrawn { background: #ececec; color: #5b5b5b; }
+.status-underreview { background: #e8eef8; color: #2f4f7a; }
 
 .pill {
   display: inline-flex;
@@ -401,41 +402,59 @@ h1, h2, .display-6, .hero-title {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: 1.3fr 0.9fr;
-  gap: 1.5rem;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
 }
 
-.hero-copy {
-  padding: 2.2rem 2rem;
+.hero-landing {
+  min-height: calc(100vh - 9rem);
+  justify-content: center;
+  padding: 2.5rem 0.5rem 3.5rem;
+}
+
+.hero-brand {
+  margin: 0 0 1rem;
+  font-family: var(--hh-serif);
+  font-size: clamp(1.55rem, 2.6vw, 2rem);
+  font-weight: 560;
+  letter-spacing: -0.03em;
+  color: var(--hh-sea-deep);
 }
 
 .hero-title {
-  font-size: clamp(2.1rem, 4vw, 3.3rem);
+  font-size: clamp(2.15rem, 4.4vw, 3.45rem);
   line-height: 1.08;
-  margin: 0.2rem 0 0.9rem;
+  margin: 0 auto 1rem;
+  max-width: 16ch;
+}
+
+.hero-lede {
+  margin: 0 auto;
+  max-width: 34rem;
+  font-size: 1.1rem;
+  line-height: 1.55;
+  color: var(--hh-ink-soft);
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
-  margin-top: 1.4rem;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
 }
 
-.demo-card, .dash-card {
+.dash-card {
   background: var(--hh-paper);
   border: 1px solid var(--hh-line);
   border-radius: var(--hh-radius);
   padding: 1.4rem;
   box-shadow: var(--hh-shadow);
-}
-
-.demo-card code {
-  background: var(--hh-sand);
-  padding: 0.1rem 0.35rem;
-  border-radius: 0.35rem;
 }
 
 .dash-grid {
@@ -723,13 +742,21 @@ h1, h2, .display-6, .hero-title {
 }
 
 @media (max-width: 768px) {
-  .hero,
   .dash-grid,
   .summary-grid,
   .choice-grid,
   .choice-grid-3,
   .wizard-steps {
     grid-template-columns: 1fr;
+  }
+
+  .hero-landing {
+    min-height: calc(100vh - 8rem);
+    padding: 2rem 0 2.5rem;
+  }
+
+  .hero-title {
+    max-width: none;
   }
 
   .grid-footer {

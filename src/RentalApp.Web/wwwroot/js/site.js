@@ -136,8 +136,9 @@
 
       const statusCell = document.createElement('td');
       const badge = document.createElement('span');
-      badge.className = `status-badge status-${item.status.toLowerCase()}`;
-      badge.textContent = item.status;
+      const statusKey = String(item.status || '').toLowerCase();
+      badge.className = `status-badge status-${statusKey}`;
+      badge.textContent = item.status === 'UnderReview' ? 'Under Review' : item.status;
       statusCell.appendChild(badge);
       row.appendChild(statusCell);
       appendCell(row, new Date(item.updatedAtUtc).toLocaleString());
@@ -150,6 +151,26 @@
       open.href = item.openUrl;
       open.textContent = 'Open';
       actions.appendChild(open);
+      if (item.claimUrl) {
+        const claim = document.createElement('form');
+        claim.method = 'post';
+        claim.action = item.claimUrl;
+        claim.className = 'd-inline';
+        const token = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (token) {
+          const hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = '__RequestVerificationToken';
+          hidden.value = token.value;
+          claim.appendChild(hidden);
+        }
+        const claimBtn = document.createElement('button');
+        claimBtn.type = 'submit';
+        claimBtn.className = 'btn btn-sm btn-primary';
+        claimBtn.textContent = 'Claim';
+        claim.appendChild(claimBtn);
+        actions.appendChild(claim);
+      }
       if (item.reviewUrl) {
         const review = document.createElement('button');
         review.type = 'button';
@@ -157,6 +178,32 @@
         review.dataset.modalUrl = item.reviewUrl;
         review.textContent = 'Review';
         actions.appendChild(review);
+      }
+      if (item.releaseUrl) {
+        const release = document.createElement('form');
+        release.method = 'post';
+        release.action = item.releaseUrl;
+        release.className = 'd-inline';
+        const token = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (token) {
+          const hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = '__RequestVerificationToken';
+          hidden.value = token.value;
+          release.appendChild(hidden);
+        }
+        const releaseBtn = document.createElement('button');
+        releaseBtn.type = 'submit';
+        releaseBtn.className = 'btn btn-sm btn-outline-secondary';
+        releaseBtn.textContent = 'Release';
+        release.appendChild(releaseBtn);
+        actions.appendChild(release);
+      }
+      if (item.claimedByDisplayName && !item.reviewUrl && !item.claimUrl) {
+        const claimed = document.createElement('span');
+        claimed.className = 'text-muted small';
+        claimed.textContent = `Claimed by ${item.claimedByDisplayName}`;
+        actions.appendChild(claimed);
       }
       actionsCell.appendChild(actions);
       row.appendChild(actionsCell);

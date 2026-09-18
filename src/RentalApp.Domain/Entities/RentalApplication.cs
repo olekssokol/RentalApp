@@ -12,6 +12,9 @@ public class RentalApplication : Entity
     public ApplicationStatus Status { get; set; } = ApplicationStatus.Draft;
     public ApplicationWizardSection CurrentSection { get; set; } = ApplicationWizardSection.ApplicantInfo;
 
+    public string? ClaimedByUserId { get; set; }
+    public DateTime? ClaimedAtUtc { get; set; }
+
     public string? FullName { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }

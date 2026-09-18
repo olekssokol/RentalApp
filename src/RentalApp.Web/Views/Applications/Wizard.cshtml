@@ -81,7 +81,15 @@
                 {
                     <button type="submit" formaction="@Url.Action("Withdraw")" class="btn btn-outline-danger" formnovalidate onclick="return confirm('Withdraw this application?');">Withdraw</button>
                 }
-                @if (Model.IsManager && Model.Status == ApplicationStatus.Submitted)
+                @if (Model.CanClaim)
+                {
+                    <button type="submit" formaction="@Url.Action("Claim")" class="btn btn-primary" formnovalidate>Claim</button>
+                }
+                @if (Model.CanRelease)
+                {
+                    <button type="submit" formaction="@Url.Action("Release")" class="btn btn-outline-secondary" formnovalidate>Release</button>
+                }
+                @if (Model.CanReview)
                 {
                     <button type="button" class="btn btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = Model.Id })">Review</button>
                 }
@@ -90,6 +98,10 @@
     </form>
 </div>
 
+@if (Model.IsManager && Model.Status == ApplicationStatus.UnderReview && !Model.CanReview && !string.IsNullOrWhiteSpace(Model.ClaimedByDisplayName))
+{
+    <div class="notice-banner mb-3">Claimed by @Model.ClaimedByDisplayName</div>
+}
 @if (Model.IsManager && Model.StatusHistory.Count > 0)
 {
     <div class="app-card">

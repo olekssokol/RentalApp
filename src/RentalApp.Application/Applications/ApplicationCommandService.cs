@@ -245,6 +245,67 @@ public class ApplicationCommandService : IApplicationCommandService
         return Result.Success();
     }
 
+    public async Task<Result> ClaimAsync(ClaimApplicationCommand command, CancellationToken ct = default)
+    {
+        await using var transaction = await _applications.BeginSerializableAsync(ct);
+        try
+        {
+            var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
+            if (application is null)
+                return Result.Failure("Application not found.");
+
+            var claimCheck = ApplicationRules.EnsureCanClaim(application.Status);
+            if (claimCheck.IsFailure)
+                return claimCheck;
+
+            var from = application.Status;
+            application.Status = ApplicationStatus.UnderReview;
+            application.ClaimedByUserId = command.ManagerUserId;
+            application.ClaimedAtUtc = DateTime.UtcNow;
+            application.UpdatedAtUtc = DateTime.UtcNow;
+            AddHistory(
+                application,
+                from,
+                ApplicationStatus.UnderReview,
+                command.ManagerUserId,
+                command.ManagerDisplayName,
+                "Claimed for review");
+            await _applications.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return Result.Success();
+        }
+        catch (Exception ex) when (_applications.IsSerializationFailure(ex))
+        {
+            return Result.Failure("This application was claimed by another manager. Reload and try again.");
+        }
+    }
+
+    public async Task<Result> ReleaseAsync(ReleaseApplicationCommand command, CancellationToken ct = default)
+    {
+        var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure("Application not found.");
+
+        var releaseCheck = ApplicationRules.EnsureCanRelease(
+            application.Status, application.ClaimedByUserId, command.ManagerUserId);
+        if (releaseCheck.IsFailure)
+            return releaseCheck;
+
+        var from = application.Status;
+        application.Status = ApplicationStatus.Submitted;
+        ClearClaim(application);
+        application.UpdatedAtUtc = DateTime.UtcNow;
+        AddHistory(
+            application,
+            from,
+            ApplicationStatus.Submitted,
+            command.ManagerUserId,
+            command.ManagerDisplayName,
+            "Released back to review queue");
+        await _applications.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
     public async Task<Result> ReviewAsync(ReviewApplicationCommand command, CancellationToken ct = default)
     {
         var commentCheck = ApplicationRules.EnsureReviewComment(command.Outcome, command.Comment);
@@ -258,7 +319,8 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure("Application not found.");
 
-        var reviewCheck = ApplicationRules.EnsureCanReview(application.Status);
+        var reviewCheck = ApplicationRules.EnsureCanCompleteReview(
+            application.Status, application.ClaimedByUserId, command.ManagerUserId);
         if (reviewCheck.IsFailure)
             return reviewCheck;
 
@@ -276,11 +338,16 @@ public class ApplicationCommandService : IApplicationCommandService
             if (application is null)
                 return Result.Failure("Application not found.");
 
+            var reviewCheck = ApplicationRules.EnsureCanCompleteReview(
+                application.Status, application.ClaimedByUserId, command.ManagerUserId);
+            if (reviewCheck.IsFailure)
+                return reviewCheck;
+
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var approveCheck = ApplicationRules.EnsureCanApprove(
-                application.Status, UnitAvailability.HasActiveLease(application.Unit.Leases, today));
-            if (approveCheck.IsFailure)
-                return approveCheck;
+            var leaseCheck = ApplicationRules.EnsureUnitCanBeApproved(
+                UnitAvailability.HasActiveLease(application.Unit.Leases, today));
+            if (leaseCheck.IsFailure)
+                return leaseCheck;
 
             var (start, end) = ApplicationRules.CreateTwelveMonthLeaseTerm(today);
             _applications.AddLease(new Lease
@@ -307,12 +374,19 @@ public class ApplicationCommandService : IApplicationCommandService
         var from = application.Status;
         var to = ApplicationRules.MapOutcomeToStatus(command.Outcome);
         application.Status = to;
+        ClearClaim(application);
         application.UpdatedAtUtc = DateTime.UtcNow;
 
         if (command.Outcome == ReviewOutcome.Return)
             application.CurrentSection = ApplicationWizardSection.ApplicantInfo;
 
         AddHistory(application, from, to, command.ManagerUserId, command.ManagerDisplayName, command.Comment);
+    }
+
+    private static void ClearClaim(RentalApplication application)
+    {
+        application.ClaimedByUserId = null;
+        application.ClaimedAtUtc = null;
     }
 
     private static Result EnsureApplicantAccess(RentalApplication application, string userId, bool isManager)

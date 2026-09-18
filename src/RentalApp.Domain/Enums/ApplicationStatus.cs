@@ -7,5 +7,6 @@ public enum ApplicationStatus
     Returned = 2,
     Approved = 3,
     Denied = 4,
-    Withdrawn = 5
+    Withdrawn = 5,
+    UnderReview = 6
 }

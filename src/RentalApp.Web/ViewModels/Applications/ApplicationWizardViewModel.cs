@@ -16,6 +16,10 @@ public class ApplicationWizardViewModel
     public bool IsManager { get; set; }
     public bool ApplicantInfoSaved { get; set; }
     public bool ResidenceHistorySaved { get; set; }
+    public bool CanClaim { get; set; }
+    public bool CanRelease { get; set; }
+    public bool CanReview { get; set; }
+    public string? ClaimedByDisplayName { get; set; }
 
     [Required, MaxLength(200), Display(Name = "Full name")]
     public string? FullName { get; set; }
@@ -43,10 +47,14 @@ public class ApplicationWizardViewModel
     public static ApplicationWizardViewModel From(
         ApplicationDetailDto detail,
         bool isManager,
+        string currentUserId,
         ApplicationWizardSection? requestedSection = null)
     {
         var canEdit = detail.CanEdit && !isManager;
         var displaySection = ResolveDisplaySection(canEdit, detail.CurrentSection, requestedSection);
+        var isClaimer = isManager
+            && detail.ClaimedByUserId is not null
+            && string.Equals(detail.ClaimedByUserId, currentUserId, StringComparison.Ordinal);
         return new ApplicationWizardViewModel
         {
             Id = detail.Id,
@@ -59,6 +67,10 @@ public class ApplicationWizardViewModel
             IsManager = isManager,
             ApplicantInfoSaved = detail.ApplicantInfoSaved,
             ResidenceHistorySaved = detail.ResidenceHistorySaved,
+            CanClaim = isManager && detail.Status == ApplicationStatus.Submitted,
+            CanRelease = isClaimer && detail.Status == ApplicationStatus.UnderReview,
+            CanReview = isClaimer && detail.Status == ApplicationStatus.UnderReview,
+            ClaimedByDisplayName = detail.ClaimedByDisplayName,
             FullName = detail.FullName,
             Phone = detail.Phone,
             Email = detail.Email,

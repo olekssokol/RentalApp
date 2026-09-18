@@ -14,4 +14,7 @@ public record ApplicationGridRowResponse(
     string Status,
     DateTime UpdatedAtUtc,
     string OpenUrl,
-    string? ReviewUrl);
+    string? ClaimUrl,
+    string? ReviewUrl,
+    string? ReleaseUrl,
+    string? ClaimedByDisplayName);

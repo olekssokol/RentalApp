@@ -17,7 +17,7 @@ public static class ApplicationRules
     public static bool CanWithdraw(ApplicationStatus status) =>
         status is ApplicationStatus.Draft or ApplicationStatus.Submitted or ApplicationStatus.Returned;
 
-    public static bool CanReview(ApplicationStatus status) =>
+    public static bool CanClaim(ApplicationStatus status) =>
         status == ApplicationStatus.Submitted;
 
     public static Result EnsureCanEdit(ApplicationStatus status)
@@ -41,10 +41,32 @@ public static class ApplicationRules
         return Result.Success();
     }
 
-    public static Result EnsureCanReview(ApplicationStatus status) =>
-        CanReview(status)
+    public static Result EnsureCanClaim(ApplicationStatus status) =>
+        CanClaim(status)
             ? Result.Success()
-            : Result.Failure("Only submitted applications can be reviewed.");
+            : Result.Failure("Only submitted applications can be claimed for review.");
+
+    public static Result EnsureCanRelease(ApplicationStatus status, string? claimedByUserId, string actorUserId)
+    {
+        if (status != ApplicationStatus.UnderReview)
+            return Result.Failure("Only applications under review can be released.");
+
+        if (!string.Equals(claimedByUserId, actorUserId, StringComparison.Ordinal))
+            return Result.Failure("Only the manager who claimed this application can release it.");
+
+        return Result.Success();
+    }
+
+    public static Result EnsureCanCompleteReview(ApplicationStatus status, string? claimedByUserId, string actorUserId)
+    {
+        if (status != ApplicationStatus.UnderReview)
+            return Result.Failure("Only claimed applications under review can be completed.");
+
+        if (!string.Equals(claimedByUserId, actorUserId, StringComparison.Ordinal))
+            return Result.Failure("Only the manager who claimed this application can complete the review.");
+
+        return Result.Success();
+    }
 
     public static Result EnsureReviewComment(ReviewOutcome outcome, string? comment)
     {
@@ -54,17 +76,10 @@ public static class ApplicationRules
         return Result.Success();
     }
 
-    public static Result EnsureCanApprove(ApplicationStatus status, bool unitHasActiveLease)
-    {
-        var reviewCheck = EnsureCanReview(status);
-        if (reviewCheck.IsFailure)
-            return reviewCheck;
-
-        if (unitHasActiveLease)
-            return Result.Failure("This unit already has an active lease. Approval is not allowed.");
-
-        return Result.Success();
-    }
+    public static Result EnsureUnitCanBeApproved(bool unitHasActiveLease) =>
+        unitHasActiveLease
+            ? Result.Failure("This unit already has an active lease. Approval is not allowed.")
+            : Result.Success();
 
     public static ApplicationStatus MapOutcomeToStatus(ReviewOutcome outcome) => outcome switch
     {

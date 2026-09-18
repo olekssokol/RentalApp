@@ -5,25 +5,14 @@
 
 @if (User.Identity?.IsAuthenticated != true)
 {
-    <section class="hero">
-        <div class="app-card hero-copy">
-            <p class="page-kicker">Rental applications</p>
-            <h1 class="hero-title">A quieter way to apply for a home.</h1>
-            <p class="lead mb-0">Harbor Homes keeps property managers and applicants on one calm path: browse a unit, complete a short application, and review with a clear decision.</p>
-            <div class="hero-actions">
-                <a class="btn btn-primary" asp-controller="Account" asp-action="Login">Log in</a>
-                <a class="btn btn-outline-secondary" asp-controller="Account" asp-action="Register">Create an account</a>
-            </div>
+    <section class="hero hero-landing">
+        <p class="hero-brand">Harbor Homes</p>
+        <h1 class="hero-title">A quieter way to apply for a home.</h1>
+        <p class="hero-lede">Browse a unit, complete a short application, and review with a clear decision.</p>
+        <div class="hero-actions">
+            <a class="btn btn-primary" asp-controller="Account" asp-action="Login">Log in</a>
+            <a class="btn btn-outline-secondary" asp-controller="Account" asp-action="Register">Create an account</a>
         </div>
-        <aside class="demo-card">
-            <p class="page-kicker">Demo access</p>
-            <h2 class="h4">Try it with seeded accounts</h2>
-            <p class="mb-3">Password for both: <code>Passw0rd!</code></p>
-            <ul class="mb-0">
-                <li class="mb-2"><strong>Property manager</strong><br /><code>pm1@rental.local</code></li>
-                <li><strong>Applicant</strong><br /><code>applicant1@rental.local</code></li>
-            </ul>
-        </aside>
     </section>
 }
 else if (User.IsInRole(AppRoles.PropertyManager))

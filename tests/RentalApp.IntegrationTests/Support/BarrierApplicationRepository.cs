@@ -4,30 +4,45 @@ using RentalApp.Domain.Entities;
 
 namespace RentalApp.IntegrationTests.Support;
 
-// The barrier is after the SERIALIZABLE read, so both approvals observe the same
-// pre-insert state. SQL Server must then allow at most one transaction to commit.
+// The barrier is after the SERIALIZABLE read, so both operations observe the same
+// pre-write state. SQL Server must then allow at most one transaction to commit.
 internal sealed class BarrierApplicationRepository : IRentalApplicationRepository
 {
     private readonly IRentalApplicationRepository _inner;
     private readonly Barrier _barrier;
+    private readonly BarrierPoint _point;
 
-    public BarrierApplicationRepository(IRentalApplicationRepository inner, Barrier barrier)
+    public BarrierApplicationRepository(
+        IRentalApplicationRepository inner,
+        Barrier barrier,
+        BarrierPoint point = BarrierPoint.GetWithUnitLeases)
     {
         _inner = inner;
         _barrier = barrier;
+        _point = point;
     }
 
     public Task<RentalApplication?> GetDetailAsync(int id, CancellationToken ct = default) => _inner.GetDetailAsync(id, ct);
     public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => _inner.ListAsync(query, ct);
-    public Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default) => _inner.GetByIdAsync(id, ct);
+
+    public async Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default)
+    {
+        var application = await _inner.GetByIdAsync(id, ct);
+        if (_point == BarrierPoint.GetById)
+            Wait(ct);
+        return application;
+    }
+
     public Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default) => _inner.GetWithResidencesAsync(id, ct);
+
     public async Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default)
     {
         var application = await _inner.GetWithUnitLeasesAsync(id, ct);
-        if (!_barrier.SignalAndWait(TimeSpan.FromSeconds(20), ct))
-            throw new TimeoutException("Competing approval did not reach the protected read.");
+        if (_point == BarrierPoint.GetWithUnitLeases)
+            Wait(ct);
         return application;
     }
+
     public Task<Unit?> GetUnitWithLeasesAsync(int unitId, CancellationToken ct = default) => _inner.GetUnitWithLeasesAsync(unitId, ct);
     public Task AddAsync(RentalApplication application, CancellationToken ct = default) => _inner.AddAsync(application, ct);
     public Task AddResidenceAsync(ResidenceHistory residence, CancellationToken ct = default) => _inner.AddResidenceAsync(residence, ct);
@@ -38,4 +53,16 @@ internal sealed class BarrierApplicationRepository : IRentalApplicationRepositor
     public Task SaveChangesAsync(CancellationToken ct = default) => _inner.SaveChangesAsync(ct);
     public Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default) => _inner.BeginSerializableAsync(ct);
     public bool IsSerializationFailure(Exception exception) => _inner.IsSerializationFailure(exception);
+
+    private void Wait(CancellationToken ct)
+    {
+        if (!_barrier.SignalAndWait(TimeSpan.FromSeconds(20), ct))
+            throw new TimeoutException("Competing operation did not reach the protected read.");
+    }
+}
+
+internal enum BarrierPoint
+{
+    GetWithUnitLeases,
+    GetById
 }

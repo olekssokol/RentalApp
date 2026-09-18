@@ -205,7 +205,9 @@ public class ApplicationCommandServiceTests
         ReviewOutcome outcome, ApplicationStatus status, ApplicationWizardSection section)
     {
         var repository = new ApplicationRepositoryFake();
-        repository.Application.Status = ApplicationStatus.Submitted;
+        repository.Application.Status = ApplicationStatus.UnderReview;
+        repository.Application.ClaimedByUserId = "manager";
+        repository.Application.ClaimedAtUtc = DateTime.UtcNow;
         var service = new ApplicationCommandService(repository);
 
         var result = await service.ReviewAsync(new(1, "manager", "Pat Manager", outcome, "Review reason"));
@@ -213,13 +215,104 @@ public class ApplicationCommandServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(status, repository.Application.Status);
         Assert.Equal(section, repository.Application.CurrentSection);
+        Assert.Null(repository.Application.ClaimedByUserId);
+        Assert.Null(repository.Application.ClaimedAtUtc);
         var history = Assert.Single(repository.History);
-        Assert.Equal(ApplicationStatus.Submitted, history.FromStatus);
+        Assert.Equal(ApplicationStatus.UnderReview, history.FromStatus);
         Assert.Equal(status, history.ToStatus);
         Assert.Equal("manager", history.ChangedByUserId);
         Assert.Equal("Pat Manager", history.ChangedByDisplayName);
         Assert.Equal("Review reason", history.Comment);
         Assert.True(repository.SaveCount > 0);
+    }
+
+    [Fact]
+    public async Task ClaimAsync_SubmittedApplication_MovesToUnderReviewAndRecordsHistory()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Status = ApplicationStatus.Submitted;
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.ClaimAsync(new(1, "manager", "Pat Manager"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ApplicationStatus.UnderReview, repository.Application.Status);
+        Assert.Equal("manager", repository.Application.ClaimedByUserId);
+        Assert.NotNull(repository.Application.ClaimedAtUtc);
+        var history = Assert.Single(repository.History);
+        Assert.Equal(ApplicationStatus.Submitted, history.FromStatus);
+        Assert.Equal(ApplicationStatus.UnderReview, history.ToStatus);
+        Assert.Equal("Claimed for review", history.Comment);
+    }
+
+    [Fact]
+    public async Task ReleaseAsync_Claimer_ReturnsToSubmittedAndClearsClaim()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Status = ApplicationStatus.UnderReview;
+        repository.Application.ClaimedByUserId = "manager";
+        repository.Application.ClaimedAtUtc = DateTime.UtcNow;
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.ReleaseAsync(new(1, "manager", "Pat Manager"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ApplicationStatus.Submitted, repository.Application.Status);
+        Assert.Null(repository.Application.ClaimedByUserId);
+        Assert.Null(repository.Application.ClaimedAtUtc);
+        var history = Assert.Single(repository.History);
+        Assert.Equal(ApplicationStatus.UnderReview, history.FromStatus);
+        Assert.Equal(ApplicationStatus.Submitted, history.ToStatus);
+        Assert.Equal("Released back to review queue", history.Comment);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_SubmittedWithoutClaim_DoesNotMutate()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Status = ApplicationStatus.Submitted;
+        var before = Snapshot(repository.Application);
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.ReviewAsync(new(1, "manager", "Pat Manager", ReviewOutcome.Deny, "No"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(before, Snapshot(repository.Application));
+        Assert.Equal(0, repository.SaveCount);
+        Assert.Empty(repository.History);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_OtherManager_DoesNotMutate()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Status = ApplicationStatus.UnderReview;
+        repository.Application.ClaimedByUserId = "manager";
+        repository.Application.ClaimedAtUtc = DateTime.UtcNow;
+        var before = Snapshot(repository.Application);
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.ReviewAsync(new(1, "other", "Other Manager", ReviewOutcome.Deny, "No"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(before, Snapshot(repository.Application));
+        Assert.Equal(0, repository.SaveCount);
+        Assert.Empty(repository.History);
+    }
+
+    [Fact]
+    public async Task WithdrawAsync_UnderReview_IsRejected()
+    {
+        var repository = new ApplicationRepositoryFake();
+        repository.Application.Status = ApplicationStatus.UnderReview;
+        repository.Application.ClaimedByUserId = "manager";
+        var service = new ApplicationCommandService(repository);
+
+        var result = await service.WithdrawAsync(new(1, "owner"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ApplicationStatus.UnderReview, repository.Application.Status);
+        Assert.Equal(0, repository.SaveCount);
     }
 
     [Fact]
@@ -283,6 +376,7 @@ public class ApplicationCommandServiceTests
         application.CurrentAddress,
         application.ApplicantInfoSaved,
         application.ResidenceHistorySaved,
+        application.ClaimedByUserId,
         Residences = application.Residences.Select(r => new { r.Id, r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate })
     });
 }

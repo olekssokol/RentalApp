@@ -12,16 +12,17 @@ public class ApplicationRulesTests
     [InlineData(ApplicationStatus.Approved, false, false, false, false, true)]
     [InlineData(ApplicationStatus.Denied, false, false, false, false, true)]
     [InlineData(ApplicationStatus.Withdrawn, false, false, false, false, true)]
+    [InlineData(ApplicationStatus.UnderReview, false, false, false, false, false)]
     public void StatusRules_ForEachStatus_EnforceAllowedActions(
-        ApplicationStatus status, bool editable, bool submittable, bool withdrawable, bool reviewable, bool terminal)
+        ApplicationStatus status, bool editable, bool submittable, bool withdrawable, bool claimable, bool terminal)
     {
         Assert.Equal(editable, ApplicationRules.CanEditSections(status));
         Assert.Equal(editable, ApplicationRules.EnsureCanEdit(status).IsSuccess);
         Assert.Equal(submittable, ApplicationRules.CanSubmit(status));
         Assert.Equal(submittable, ApplicationRules.EnsureCanSubmit(status, true, true, false).IsSuccess);
         Assert.Equal(withdrawable, ApplicationRules.CanWithdraw(status));
-        Assert.Equal(reviewable, ApplicationRules.CanReview(status));
-        Assert.Equal(reviewable, ApplicationRules.EnsureCanReview(status).IsSuccess);
+        Assert.Equal(claimable, ApplicationRules.CanClaim(status));
+        Assert.Equal(claimable, ApplicationRules.EnsureCanClaim(status).IsSuccess);
         Assert.Equal(terminal, ApplicationRules.IsTerminal(status));
     }
 
@@ -68,17 +69,36 @@ public class ApplicationRulesTests
     }
 
     [Theory]
-    [InlineData(ApplicationStatus.Submitted, false, true)]
-    [InlineData(ApplicationStatus.Submitted, true, false)]
-    [InlineData(ApplicationStatus.Draft, false, false)]
-    [InlineData(ApplicationStatus.Returned, false, false)]
-    [InlineData(ApplicationStatus.Approved, false, false)]
-    [InlineData(ApplicationStatus.Denied, false, false)]
-    [InlineData(ApplicationStatus.Withdrawn, false, false)]
-    public void EnsureCanApprove_StatusAndAvailability_RequiresSubmittedAndAvailable(
-        ApplicationStatus status, bool activeLease, bool allowed)
+    [InlineData(ApplicationStatus.UnderReview, "manager", "manager", true)]
+    [InlineData(ApplicationStatus.UnderReview, "manager", "other", false)]
+    [InlineData(ApplicationStatus.Submitted, "manager", "manager", false)]
+    [InlineData(ApplicationStatus.Draft, null, "manager", false)]
+    public void EnsureCanCompleteReview_RequiresUnderReviewAndClaimer(
+        ApplicationStatus status, string? claimedBy, string actor, bool allowed)
     {
-        var result = ApplicationRules.EnsureCanApprove(status, activeLease);
+        var result = ApplicationRules.EnsureCanCompleteReview(status, claimedBy, actor);
+
+        Assert.Equal(allowed, result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(ApplicationStatus.UnderReview, "manager", "manager", true)]
+    [InlineData(ApplicationStatus.UnderReview, "manager", "other", false)]
+    [InlineData(ApplicationStatus.Submitted, "manager", "manager", false)]
+    public void EnsureCanRelease_RequiresUnderReviewAndClaimer(
+        ApplicationStatus status, string? claimedBy, string actor, bool allowed)
+    {
+        var result = ApplicationRules.EnsureCanRelease(status, claimedBy, actor);
+
+        Assert.Equal(allowed, result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void EnsureUnitCanBeApproved_ActiveLease_BlocksApproval(bool activeLease, bool allowed)
+    {
+        var result = ApplicationRules.EnsureUnitCanBeApproved(activeLease);
 
         Assert.Equal(allowed, result.IsSuccess);
     }

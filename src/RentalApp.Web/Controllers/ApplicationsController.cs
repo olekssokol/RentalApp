@@ -5,6 +5,7 @@ using RentalApp.Application.Applications;
 using RentalApp.Application.Properties;
 using RentalApp.Domain.Common;
 using RentalApp.Domain.Enums;
+using RentalApp.Domain.Services;
 using RentalApp.Infrastructure.Identity;
 using RentalApp.Web.Extensions;
 using RentalApp.Web.ViewModels.Applications;
@@ -72,19 +73,33 @@ public class ApplicationsController : Controller
         CancellationToken ct = default)
     {
         var isManager = User.IsManager();
+        var userId = User.GetUserId();
         var result = await _queries.ListAsync(new ApplicationListQuery(
-            User.GetUserId(), isManager, status, propertyId, page, pageSize, sort, direction), ct);
-        var rows = result.Items.Select(item => new ApplicationGridRowResponse(
-            item.Id,
-            item.ApplicantName,
-            item.PropertyName,
-            item.UnitNumber,
-            item.Status.ToString(),
-            item.UpdatedAtUtc,
-            Url.Action(nameof(Wizard), new { id = item.Id })!,
-            isManager && item.Status == ApplicationStatus.Submitted
-                ? Url.Action(nameof(ReviewModal), new { id = item.Id })
-                : null)).ToList();
+            userId, isManager, status, propertyId, page, pageSize, sort, direction), ct);
+        var rows = result.Items.Select(item =>
+        {
+            var isClaimer = isManager
+                && item.ClaimedByUserId is not null
+                && string.Equals(item.ClaimedByUserId, userId, StringComparison.Ordinal);
+            return new ApplicationGridRowResponse(
+                item.Id,
+                item.ApplicantName,
+                item.PropertyName,
+                item.UnitNumber,
+                item.Status.ToString(),
+                item.UpdatedAtUtc,
+                Url.Action(nameof(Wizard), new { id = item.Id })!,
+                isManager && item.Status == ApplicationStatus.Submitted
+                    ? Url.Action(nameof(Claim), new { id = item.Id })
+                    : null,
+                isClaimer && item.Status == ApplicationStatus.UnderReview
+                    ? Url.Action(nameof(ReviewModal), new { id = item.Id })
+                    : null,
+                isClaimer && item.Status == ApplicationStatus.UnderReview
+                    ? Url.Action(nameof(Release), new { id = item.Id })
+                    : null,
+                item.Status == ApplicationStatus.UnderReview ? item.ClaimedByDisplayName : null);
+        }).ToList();
 
         return Ok(new ApplicationGridResponse(rows, result.FilteredTotal, result.Page, result.PageSize));
     }
@@ -104,7 +119,7 @@ public class ApplicationsController : Controller
                 ViewData["PropertyManagerNotes"] = BuildNotesViewModel(id, notes.Value!);
         }
 
-        return View(ApplicationWizardViewModel.From(detail, isManager, section));
+        return View(ApplicationWizardViewModel.From(detail, isManager, User.GetUserId(), section));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -148,7 +163,7 @@ public class ApplicationsController : Controller
 
         if (detail.CurrentSection == ApplicationWizardSection.ApplicantInfo)
         {
-            var vm = ApplicationWizardViewModel.From(detail, isManager);
+            var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
             vm.FullName = model.FullName;
             vm.Phone = model.Phone;
             vm.Email = model.Email;
@@ -171,7 +186,7 @@ public class ApplicationsController : Controller
                 new SaveResidenceHistoryCommand(model.Id, userId, isManager, Advance: true), ct);
             if (save.IsFailure)
             {
-                var vm = ApplicationWizardViewModel.From(detail, isManager);
+                var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
                 ModelState.AddModelError(string.Empty, save.Error!);
                 return View(vm);
             }
@@ -304,14 +319,39 @@ public class ApplicationsController : Controller
     }
 
     [Authorize(Roles = AppRoles.PropertyManager)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Claim(int id, CancellationToken ct)
+    {
+        var result = await _commands.ClaimAsync(
+            new ClaimApplicationCommand(id, User.GetUserId(), User.GetDisplayName()), ct);
+        if (result.IsFailure)
+            TempData["Error"] = result.Error;
+        return RedirectToAction(nameof(Wizard), new { id });
+    }
+
+    [Authorize(Roles = AppRoles.PropertyManager)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Release(int id, CancellationToken ct)
+    {
+        var result = await _commands.ReleaseAsync(
+            new ReleaseApplicationCommand(id, User.GetUserId(), User.GetDisplayName()), ct);
+        if (result.IsFailure)
+            TempData["Error"] = result.Error;
+        return RedirectToAction(nameof(Wizard), new { id });
+    }
+
+    [Authorize(Roles = AppRoles.PropertyManager)]
     [HttpGet]
     public async Task<IActionResult> ReviewModal(int id, CancellationToken ct)
     {
         var detail = await GetDetailAsync(id, ct);
         if (detail is null)
             return NotFound();
-        if (detail.Status != ApplicationStatus.Submitted)
-            return BadRequest("Only submitted applications can be reviewed.");
+
+        var completeCheck = ApplicationRules.EnsureCanCompleteReview(
+            detail.Status, detail.ClaimedByUserId, User.GetUserId());
+        if (completeCheck.IsFailure)
+            return BadRequest(completeCheck.Error);
 
         return PartialView("Partials/_ReviewModal", new ReviewFormViewModel
         {

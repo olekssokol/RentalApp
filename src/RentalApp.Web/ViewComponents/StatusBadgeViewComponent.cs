@@ -15,6 +15,7 @@ public class StatusBadgeViewComponent : ViewComponent
             ApplicationStatus.Approved => ("approved", "Approved"),
             ApplicationStatus.Denied => ("denied", "Denied"),
             ApplicationStatus.Withdrawn => ("withdrawn", "Withdrawn"),
+            ApplicationStatus.UnderReview => ("underreview", "Under Review"),
             _ => ("draft", status.ToString())
         };
         return View(new StatusBadgeModel(css, label));

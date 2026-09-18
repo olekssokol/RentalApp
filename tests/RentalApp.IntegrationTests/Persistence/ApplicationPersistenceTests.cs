@@ -85,13 +85,14 @@ public class ApplicationPersistenceTests
     }
 
     [Fact]
-    public async Task ApproveAsync_SubmittedApplication_PersistsStatusLeaseAndHistoryTogether()
+    public async Task ApproveAsync_ClaimedApplication_PersistsStatusLeaseAndHistoryTogether()
     {
         await using var database = await SqlTestDatabase.CreateAsync();
         var graph = await database.AddApplicationsAsync(("alice", ApplicationStatus.Submitted, 1));
         await using (var db = database.CreateContext())
         {
             var service = new ApplicationCommandService(new RentalApplicationRepository(db));
+            Assert.True((await service.ClaimAsync(new(graph.ApplicationIds[0], "manager", "Pat Manager"))).IsSuccess);
             var result = await service.ReviewAsync(new(graph.ApplicationIds[0], "manager", "Pat Manager", ReviewOutcome.Approve, null));
             Assert.True(result.IsSuccess, result.Error);
         }
@@ -99,20 +100,24 @@ public class ApplicationPersistenceTests
         await using var verification = database.CreateContext();
         var application = await verification.RentalApplications.SingleAsync(a => a.Id == graph.ApplicationIds[0]);
         var lease = await verification.Leases.SingleAsync(l => l.RentalApplicationId == application.Id);
-        var history = await verification.ApplicationStatusHistories.SingleAsync(h => h.RentalApplicationId == application.Id);
+        var history = await verification.ApplicationStatusHistories
+            .Where(h => h.RentalApplicationId == application.Id && h.ToStatus == ApplicationStatus.Approved)
+            .SingleAsync();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         Assert.Equal(ApplicationStatus.Approved, application.Status);
+        Assert.Null(application.ClaimedByUserId);
+        Assert.Null(application.ClaimedAtUtc);
         Assert.Equal(graph.FirstUnitId, lease.UnitId);
         Assert.Equal(today, lease.StartDate);
         Assert.Equal(today.AddMonths(12).AddDays(-1), lease.EndDate);
-        Assert.Equal(ApplicationStatus.Submitted, history.FromStatus);
+        Assert.Equal(ApplicationStatus.UnderReview, history.FromStatus);
         Assert.Equal(ApplicationStatus.Approved, history.ToStatus);
         Assert.Equal("manager", history.ChangedByUserId);
         Assert.Equal("Pat Manager", history.ChangedByDisplayName);
     }
 
     [Fact]
-    public async Task ApproveAsync_UnitHasActiveLease_LeavesSubmittedApplicationAndSingleLease()
+    public async Task ApproveAsync_UnitHasActiveLease_LeavesUnderReviewApplicationAndSingleLease()
     {
         await using var database = await SqlTestDatabase.CreateAsync();
         var graph = await database.AddApplicationsAsync(
@@ -122,14 +127,18 @@ public class ApplicationPersistenceTests
         await using (var db = database.CreateContext())
         {
             var service = new ApplicationCommandService(new RentalApplicationRepository(db));
+            Assert.True((await service.ClaimAsync(new(graph.ApplicationIds[1], "manager", "Pat Manager"))).IsSuccess);
             var result = await service.ReviewAsync(new(graph.ApplicationIds[1], "manager", "Pat Manager", ReviewOutcome.Approve, null));
             Assert.True(result.IsFailure);
         }
 
         await using var verification = database.CreateContext();
-        Assert.Equal(ApplicationStatus.Submitted, await verification.RentalApplications.Where(a => a.Id == graph.ApplicationIds[1]).Select(a => a.Status).SingleAsync());
+        var candidate = await verification.RentalApplications.SingleAsync(a => a.Id == graph.ApplicationIds[1]);
+        Assert.Equal(ApplicationStatus.UnderReview, candidate.Status);
+        Assert.Equal("manager", candidate.ClaimedByUserId);
         Assert.Equal(1, await verification.Leases.CountAsync(l => l.UnitId == graph.FirstUnitId));
-        Assert.False(await verification.ApplicationStatusHistories.AnyAsync(h => h.RentalApplicationId == graph.ApplicationIds[1]));
+        Assert.False(await verification.ApplicationStatusHistories.AnyAsync(h =>
+            h.RentalApplicationId == graph.ApplicationIds[1] && h.ToStatus == ApplicationStatus.Approved));
     }
 
     [Fact]
@@ -164,6 +173,13 @@ public class ApplicationPersistenceTests
         var graph = await database.AddApplicationsAsync(
             ("alice", ApplicationStatus.Submitted, 1),
             ("bob", ApplicationStatus.Submitted, 1));
+        await using (var setup = database.CreateContext())
+        {
+            var service = new ApplicationCommandService(new RentalApplicationRepository(setup));
+            Assert.True((await service.ClaimAsync(new(graph.ApplicationIds[0], "manager-1", "Manager One"))).IsSuccess);
+            Assert.True((await service.ClaimAsync(new(graph.ApplicationIds[1], "manager-2", "Manager Two"))).IsSuccess);
+        }
+
         using var barrier = new Barrier(2);
         await using var firstDb = database.CreateContext();
         await using var secondDb = database.CreateContext();
@@ -181,9 +197,37 @@ public class ApplicationPersistenceTests
         var statuses = await verification.RentalApplications
             .Where(a => graph.ApplicationIds.Contains(a.Id)).Select(a => a.Status).ToListAsync();
         Assert.Equal(1, statuses.Count(s => s == ApplicationStatus.Approved));
-        Assert.Equal(1, statuses.Count(s => s == ApplicationStatus.Submitted));
+        Assert.Equal(1, statuses.Count(s => s == ApplicationStatus.UnderReview));
         Assert.Equal(1, await verification.ApplicationStatusHistories.CountAsync(h =>
             graph.ApplicationIds.Contains(h.RentalApplicationId) && h.ToStatus == ApplicationStatus.Approved));
+    }
+
+    [Fact]
+    public async Task TwoManagers_ClaimSameSubmittedApplication_OnlyOneSucceeds()
+    {
+        await using var database = await SqlTestDatabase.CreateAsync();
+        var graph = await database.AddApplicationsAsync(("alice", ApplicationStatus.Submitted, 1));
+        using var barrier = new Barrier(2);
+        await using var firstDb = database.CreateContext();
+        await using var secondDb = database.CreateContext();
+        var first = new ApplicationCommandService(
+            new BarrierApplicationRepository(new RentalApplicationRepository(firstDb), barrier, BarrierPoint.GetById));
+        var second = new ApplicationCommandService(
+            new BarrierApplicationRepository(new RentalApplicationRepository(secondDb), barrier, BarrierPoint.GetById));
+
+        var results = await Task.WhenAll(
+            Task.Run(() => first.ClaimAsync(new(graph.ApplicationIds[0], "manager-1", "Manager One"))),
+            Task.Run(() => second.ClaimAsync(new(graph.ApplicationIds[0], "manager-2", "Manager Two"))));
+
+        Assert.Single(results, r => r.IsSuccess);
+        Assert.Single(results, r => r.IsFailure);
+        await using var verification = database.CreateContext();
+        var application = await verification.RentalApplications.SingleAsync(a => a.Id == graph.ApplicationIds[0]);
+        Assert.Equal(ApplicationStatus.UnderReview, application.Status);
+        Assert.NotNull(application.ClaimedByUserId);
+        Assert.Contains(application.ClaimedByUserId, new[] { "manager-1", "manager-2" });
+        Assert.Equal(1, await verification.ApplicationStatusHistories.CountAsync(h =>
+            h.RentalApplicationId == application.Id && h.ToStatus == ApplicationStatus.UnderReview));
     }
 
     private static async Task AddActiveLeaseAsync(SqlTestDatabase database, int unitId, int applicationId)

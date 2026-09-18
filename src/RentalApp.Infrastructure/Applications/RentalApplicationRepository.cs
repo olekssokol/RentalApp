@@ -72,7 +72,11 @@ public class RentalApplicationRepository : IRentalApplicationRepository
                 a.Unit.Property.Name,
                 a.Unit.UnitNumber,
                 a.UpdatedAtUtc,
-                a.Unit.PropertyId))
+                a.Unit.PropertyId,
+                a.ClaimedByUserId,
+                a.ClaimedByUserId == null
+                    ? null
+                    : _db.Users.Where(u => u.Id == a.ClaimedByUserId).Select(u => u.FullName).FirstOrDefault()))
             .ToListAsync(ct);
 
         return new PagedResult<ApplicationListItemDto>(items, filteredTotal, page, pageSize);

@@ -17,5 +17,8 @@ public record ApplicationDetailDto(
     bool ApplicantInfoSaved,
     bool ResidenceHistorySaved,
     bool CanEdit,
+    string? ClaimedByUserId,
+    DateTime? ClaimedAtUtc,
+    string? ClaimedByDisplayName,
     IReadOnlyList<ResidenceDto> Residences,
     IReadOnlyList<StatusHistoryDto> StatusHistory);

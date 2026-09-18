@@ -9,4 +9,6 @@ public record ApplicationListItemDto(
     string PropertyName,
     string UnitNumber,
     DateTime UpdatedAtUtc,
-    int PropertyId);
+    int PropertyId,
+    string? ClaimedByUserId,
+    string? ClaimedByDisplayName);

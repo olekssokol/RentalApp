@@ -13,5 +13,7 @@ public interface IApplicationCommandService
     Task<Result<int>> AddResidenceAsync(AddResidenceCommand command, CancellationToken ct = default);
     Task<Result> UpdateResidenceAsync(UpdateResidenceCommand command, CancellationToken ct = default);
     Task<Result> DeleteResidenceAsync(DeleteResidenceCommand command, CancellationToken ct = default);
+    Task<Result> ClaimAsync(ClaimApplicationCommand command, CancellationToken ct = default);
+    Task<Result> ReleaseAsync(ReleaseApplicationCommand command, CancellationToken ct = default);
     Task<Result> ReviewAsync(ReviewApplicationCommand command, CancellationToken ct = default);
 }

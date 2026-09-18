@@ -153,7 +153,9 @@ public static class DatabaseSeeder
                 {
                     RentalApplicationId = app.Id,
                     FromStatus = ApplicationStatus.Draft,
-                    ToStatus = status == ApplicationStatus.Returned ? ApplicationStatus.Submitted : status,
+                    ToStatus = status is ApplicationStatus.Returned or ApplicationStatus.UnderReview
+                        ? ApplicationStatus.Submitted
+                        : status,
                     ChangedByUserId = user.Id,
                     ChangedByDisplayName = user.FullName,
                     Comment = "Seed transition",
@@ -174,6 +176,22 @@ public static class DatabaseSeeder
                     ChangedAtUtc = app.UpdatedAtUtc
                 });
                 app.CurrentSection = ApplicationWizardSection.ApplicantInfo;
+            }
+
+            if (status == ApplicationStatus.UnderReview)
+            {
+                app.ClaimedByUserId = managers[0].Id;
+                app.ClaimedAtUtc = app.UpdatedAtUtc;
+                db.ApplicationStatusHistories.Add(new ApplicationStatusHistory
+                {
+                    RentalApplicationId = app.Id,
+                    FromStatus = ApplicationStatus.Submitted,
+                    ToStatus = ApplicationStatus.UnderReview,
+                    ChangedByUserId = managers[0].Id,
+                    ChangedByDisplayName = managers[0].FullName,
+                    Comment = "Claimed for review",
+                    ChangedAtUtc = app.UpdatedAtUtc
+                });
             }
 
             if (status is ApplicationStatus.Approved or ApplicationStatus.Denied)
@@ -204,6 +222,7 @@ public static class DatabaseSeeder
         var approved = await CreateApp(applicants[1], leasedUnit, ApplicationStatus.Approved, true);
         await CreateApp(applicants[2], availableUnits[3], ApplicationStatus.Denied, true);
         await CreateApp(applicants[2], availableUnits[4], ApplicationStatus.Withdrawn, true);
+        await CreateApp(applicants[0], availableUnits[5], ApplicationStatus.UnderReview, true);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var (start, end) = ApplicationRules.CreateTwelveMonthLeaseTerm(today.AddMonths(-1));
