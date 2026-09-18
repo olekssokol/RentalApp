@@ -17,10 +17,12 @@ public class ResidenceFormViewModel
 
     [Display(Name = "Move-in date")]
     [DataType(DataType.Date)]
+    [DisplayFormat(DataFormatString = "{0:yyyy-MM-dd}", ApplyFormatInEditMode = true)]
     public DateOnly? MoveInDate { get; set; }
 
     [Display(Name = "Move-out date")]
     [DataType(DataType.Date)]
+    [DisplayFormat(DataFormatString = "{0:yyyy-MM-dd}", ApplyFormatInEditMode = true)]
     public DateOnly? MoveOutDate { get; set; }
 
     public int ExpectedResidenceHistoryVersion { get; set; }

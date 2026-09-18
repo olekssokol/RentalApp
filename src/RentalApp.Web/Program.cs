@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Localization;
 using RentalApp.Application;
 using RentalApp.Infrastructure;
 using RentalApp.Infrastructure.Identity;
@@ -23,6 +25,16 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
+
+var enUs = new CultureInfo("en-US");
+CultureInfo.DefaultThreadCurrentCulture = enUs;
+CultureInfo.DefaultThreadCurrentUICulture = enUs;
+app.UseRequestLocalization(new RequestLocalizationOptions
+{
+    DefaultRequestCulture = new RequestCulture(enUs),
+    SupportedCultures = [enUs],
+    SupportedUICultures = [enUs]
+});
 
 app.UseHttpsRedirection();
 app.UseRouting();

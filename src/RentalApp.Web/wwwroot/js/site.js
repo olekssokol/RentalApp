@@ -11,6 +11,7 @@
 
   const modal = new bootstrap.Modal(modalEl);
   const content = document.getElementById('appModalContent');
+  let submitAllowed = false;
 
   function parseValidation(form) {
     if (!window.jQuery || !$.validator || !$.validator.unobtrusive) return;
@@ -27,6 +28,7 @@
       return;
     }
     content.innerHTML = await response.text();
+    submitAllowed = false;
     wireForm();
     modal.show();
   }
@@ -37,8 +39,24 @@
 
     parseValidation(form);
 
+    // Enter in inputs would submit the modal and persist drafts; only Save should submit.
+    form.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (e.target.closest('textarea, button, [type="submit"]')) return;
+      e.preventDefault();
+    });
+
+    form.querySelectorAll('[type="submit"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        submitAllowed = true;
+      });
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!submitAllowed) return;
+      submitAllowed = false;
+
       const response = await fetch(form.action, {
         method: 'POST',
         body: new FormData(form),
@@ -80,6 +98,11 @@
       wireForm();
     });
   }
+
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    content.innerHTML = '';
+    submitAllowed = false;
+  });
 
   document.addEventListener('click', (e) => {
     const trigger = e.target.closest('[data-modal-url]');
@@ -142,17 +165,29 @@
       const row = document.createElement('tr');
       appendCell(row, `#${item.id}`, 'row-title');
       appendCell(row, item.applicantName);
-      appendCell(row, item.propertyName);
+      const propertyCell = appendCell(row, item.propertyName, 'grid-property');
+      propertyCell.title = item.propertyName || '';
       appendCell(row, item.unitNumber);
 
       const statusCell = document.createElement('td');
+      statusCell.className = 'text-nowrap';
       const badge = document.createElement('span');
       const statusKey = String(item.status || '').toLowerCase();
       badge.className = `status-badge status-${statusKey}`;
       badge.textContent = item.status === 'UnderReview' ? 'Under Review' : item.status;
       statusCell.appendChild(badge);
       row.appendChild(statusCell);
-      appendCell(row, new Date(item.updatedAtUtc).toLocaleString());
+      appendCell(
+        row,
+        new Date(item.updatedAtUtc).toLocaleString(undefined, {
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        }),
+        'text-nowrap'
+      );
 
       const actionsCell = document.createElement('td');
       const actions = document.createElement('div');

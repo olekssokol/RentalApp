@@ -53,58 +53,59 @@
         {
             <partial name="~/Views/Applications/Partials/_Summary.cshtml" model="Model" />
         }
-
-        <div class="d-flex flex-wrap justify-content-between gap-2 mt-4 pt-3 border-top">
-            <div class="d-flex gap-2 flex-wrap">
-                @if (Model.CanEdit && Model.PreviousSection is not null)
-                {
-                    <button type="submit" name="Action" value="Back" class="btn btn-outline-secondary" formnovalidate>Back</button>
-                }
-                @if (!Model.CanEdit && Model.PreviousSection is { } previous)
-                {
-                    <a class="btn btn-outline-secondary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@previous">Previous</a>
-                }
-                <a class="btn btn-link px-0" asp-action="Index">Back to list</a>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                @if (Model.CanEdit && Model.DisplaySection != ApplicationWizardSection.Summary)
-                {
-                    <button type="submit" name="Action" value="Continue" class="btn btn-primary" formnovalidate>Continue</button>
-                }
-                @if ((!Model.CanEdit || Model.IsMultiMember) && Model.NextSection is { } next && Model.DisplaySection != ApplicationWizardSection.Summary)
-                {
-                    @if (!Model.CanEdit)
-                    {
-                        <a class="btn btn-outline-primary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@next">Next</a>
-                    }
-                }
-                @if (Model.CanSubmit)
-                {
-                    <button type="submit" name="Action" value="Submit" class="btn btn-success">Submit application</button>
-                }
-                @if (!Model.IsManager && (Model.Status == ApplicationStatus.Draft || Model.Status == ApplicationStatus.Submitted || Model.Status == ApplicationStatus.Returned))
-                {
-                    <button type="submit" formaction="@Url.Action("Withdraw")" class="btn btn-outline-danger" formnovalidate onclick="return confirm('Withdraw this application?');">Withdraw</button>
-                }
-                @if (Model.CanClaim)
-                {
-                    <button type="submit" formaction="@Url.Action("Claim")" class="btn btn-primary" formnovalidate>Claim</button>
-                }
-                @if (Model.CanRelease)
-                {
-                    <button type="submit" formaction="@Url.Action("Release")" class="btn btn-outline-secondary" formnovalidate>Release</button>
-                }
-                @if (Model.CanReview)
-                {
-                    <button type="button" class="btn btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = Model.Id })">Review</button>
-                }
-            </div>
-        </div>
     </form>
+
     @if (section == ApplicationWizardSection.Summary)
     {
         <partial name="~/Views/Applications/Partials/_ApplicationMembers.cshtml" model="Model" />
     }
+
+    <div class="d-flex flex-wrap justify-content-between gap-3 mt-4 pt-3 border-top">
+        <div class="d-flex gap-3 flex-wrap">
+            <a class="btn btn-link px-0" asp-action="Index">Back to list</a>
+            @if (!Model.IsManager && (Model.Status == ApplicationStatus.Draft || Model.Status == ApplicationStatus.Submitted || Model.Status == ApplicationStatus.Returned))
+            {
+                <button type="submit" form="application-wizard" formaction="@Url.Action("Withdraw")" class="btn btn-outline-danger" formnovalidate onclick="return confirm('Withdraw this application?');">Withdraw</button>
+            }
+            @if (Model.CanClaim)
+            {
+                <button type="submit" form="application-wizard" formaction="@Url.Action("Claim")" class="btn btn-primary" formnovalidate>Claim</button>
+            }
+            @if (Model.CanRelease)
+            {
+                <button type="submit" form="application-wizard" formaction="@Url.Action("Release")" class="btn btn-outline-secondary" formnovalidate>Release</button>
+            }
+            @if (Model.CanReview)
+            {
+                <button type="button" class="btn btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = Model.Id })">Review</button>
+            }
+        </div>
+        <div class="d-flex gap-3 flex-wrap">
+            @if (Model.CanEdit && Model.PreviousSection is not null)
+            {
+                <button type="submit" form="application-wizard" name="Action" value="Back" class="btn btn-outline-secondary" formnovalidate>Back</button>
+            }
+            @if (!Model.CanEdit && Model.PreviousSection is { } previous)
+            {
+                <a class="btn btn-outline-secondary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@previous">Previous</a>
+            }
+            @if (Model.CanEdit && Model.DisplaySection != ApplicationWizardSection.Summary)
+            {
+                <button type="submit" form="application-wizard" name="Action" value="Continue" class="btn btn-primary" formnovalidate>Continue</button>
+            }
+            @if ((!Model.CanEdit || Model.IsMultiMember) && Model.NextSection is { } next && Model.DisplaySection != ApplicationWizardSection.Summary)
+            {
+                @if (!Model.CanEdit)
+                {
+                    <a class="btn btn-outline-primary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@next">Next</a>
+                }
+            }
+            @if (Model.CanSubmit)
+            {
+                <button type="submit" form="application-wizard" name="Action" value="Submit" class="btn btn-success">Submit application</button>
+            }
+        </div>
+    </div>
 </div>
 
 @if (Model.IsManager && Model.Status == ApplicationStatus.UnderReview && !Model.CanReview && !string.IsNullOrWhiteSpace(Model.ClaimedByDisplayName))
