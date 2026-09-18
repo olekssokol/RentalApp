@@ -58,7 +58,7 @@ internal sealed class ApplicationRepositoryFake : IRentalApplicationRepository
     public Task SaveChangesAsync(CancellationToken ct = default) { SaveCount++; return Task.CompletedTask; }
 
     public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => throw new NotSupportedException();
-    public void AddLease(Lease lease) => throw new NotSupportedException();
+    public void AddLease(Lease lease) => Application.Unit.Leases.Add(lease);
     public Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken ct = default) =>
         Task.FromResult<IApplicationTransaction>(new NoOpTransaction());
     public Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default) =>

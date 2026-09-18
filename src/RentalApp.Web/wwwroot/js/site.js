@@ -50,12 +50,23 @@
         const data = await response.json();
         modal.hide();
         if (data.refreshTarget && data.refreshUrl) {
-          const target = document.querySelector(data.refreshTarget);
-          if (target) {
-            const html = await (await fetch(data.refreshUrl)).text();
-            target.innerHTML = html;
+          // Comma-separated selectors: refresh each present target (e.g. detail + grid).
+          const selectors = data.refreshTarget.split(',').map((s) => s.trim()).filter(Boolean);
+          const targets = selectors.map((sel) => document.querySelector(sel)).filter(Boolean);
+          if (targets.length === 0) {
+            // A fragment response must never fall through to a full-page navigation.
+            window.alert('The page section could not be refreshed. Please reload it.');
             return;
           }
+          let html = null;
+          for (const target of targets) {
+            // JSON-backed fragments refresh through their existing loader (and retain its state).
+            const refresh = new CustomEvent('fragment:refresh', { cancelable: true });
+            if (!target.dispatchEvent(refresh)) continue;
+            html ??= await (await fetch(data.refreshUrl)).text();
+            target.innerHTML = html;
+          }
+          return;
         }
         if (data.refreshUrl) {
           window.location.href = data.refreshUrl;
@@ -253,6 +264,10 @@
     event.preventDefault();
     state.page = 1;
     state.pageSize = Number(filterValue('pageSize')) || 10;
+    load();
+  });
+  grid.addEventListener('fragment:refresh', (event) => {
+    event.preventDefault();
     load();
   });
   sortButtons.forEach((button) => button.addEventListener('click', () => {

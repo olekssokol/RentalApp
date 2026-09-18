@@ -1,0 +1,41 @@
+@model ApplicationWizardViewModel
+
+<section class="mb-4">
+    <h3 class="h6">Applicants on this application</h3>
+    <ul class="mb-2 ps-3">
+        @foreach (var member in Model.Members)
+        {
+            <li class="mb-1">
+                @member.DisplayName
+                @if (member.IsCreator)
+                {
+                    <span class="text-muted">(creator)</span>
+                }
+                @if (Model.CanEdit && !member.IsCreator)
+                {
+                    <form asp-action="RemoveCoApplicant" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="userId" value="@member.UserId" />
+                        <button type="submit" class="btn btn-link btn-sm text-danger p-0 align-baseline">Remove</button>
+                    </form>
+                }
+            </li>
+        }
+    </ul>
+    @if (Model.CanEdit)
+    {
+        <form asp-action="AddCoApplicant" method="post" class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <div class="col-md-6">
+                <label class="form-label" for="coApplicantEmail">Add co-applicant by email</label>
+                <input id="coApplicantEmail" name="email" class="form-control" type="email" asp-for="CoApplicantEmail" placeholder="applicant@rental.local" />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-primary">Add</button>
+            </div>
+        </form>
+    }
+</section>
+

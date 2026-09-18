@@ -110,6 +110,14 @@ public class ApplicationsController : Controller
 
     [HttpGet]
     public async Task<IActionResult> Wizard(int id, ApplicationWizardSection? section, CancellationToken ct)
+        => await RenderWizardAsync(id, section, fragment: false, ct);
+
+    [HttpGet]
+    public async Task<IActionResult> WizardFragment(int id, ApplicationWizardSection? section, CancellationToken ct)
+        => await RenderWizardAsync(id, section, fragment: true, ct);
+
+    private async Task<IActionResult> RenderWizardAsync(
+        int id, ApplicationWizardSection? section, bool fragment, CancellationToken ct)
     {
         var detail = await GetDetailAsync(id, ct);
         if (detail is null)
@@ -123,7 +131,8 @@ public class ApplicationsController : Controller
                 ViewData["PropertyManagerNotes"] = BuildNotesViewModel(id, notes.Value!);
         }
 
-        return View(await BuildWizardAsync(detail, isManager, User.GetUserId(), section, ct));
+        var model = await BuildWizardAsync(detail, isManager, User.GetUserId(), section, ct);
+        return fragment ? PartialView("Partials/_WizardContent", model) : View("Wizard", model);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -194,6 +203,7 @@ public class ApplicationsController : Controller
                 vm.Phone = model.Phone;
                 vm.Email = model.Email;
                 vm.CurrentAddress = model.CurrentAddress;
+                ModelState.Remove(nameof(ApplicationWizardViewModel.ApplicantInfoVersion));
                 AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
@@ -216,6 +226,7 @@ public class ApplicationsController : Controller
             {
                 var refreshed = await GetDetailAsync(model.Id, ct);
                 var vm = await BuildWizardAsync(refreshed!, isManager, userId, displaySection, ct);
+                ModelState.Remove(nameof(ApplicationWizardViewModel.ResidenceHistoryVersion));
                 AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
@@ -298,7 +309,10 @@ public class ApplicationsController : Controller
                 model.Id = create.Value.ResidenceId;
                 var refreshed = await GetDetailAsync(model.ApplicationId, ct);
                 model.ExpectedResidenceHistoryVersion = refreshed!.ResidenceHistoryVersion;
-                AddResidenceModalFieldErrors(create.Value.FieldErrors, create.Value.ResidenceId, refreshed.Residences);
+                // The invalid draft was inserted: retry must edit that row with its new version.
+                ModelState.Remove(nameof(ResidenceFormViewModel.Id));
+                ModelState.Remove(nameof(ResidenceFormViewModel.ExpectedResidenceHistoryVersion));
+                AddResidenceModalFieldErrors(create.Value.ResidenceId, refreshed.Residences);
                 return PartialView("Partials/_ResidenceModal", model);
             }
         }
@@ -318,12 +332,13 @@ public class ApplicationsController : Controller
             {
                 var refreshed = await GetDetailAsync(model.ApplicationId, ct);
                 model.ExpectedResidenceHistoryVersion = refreshed!.ResidenceHistoryVersion;
-                AddResidenceModalFieldErrors(update.Value.FieldErrors, model.Id.Value, refreshed.Residences);
+                ModelState.Remove(nameof(ResidenceFormViewModel.ExpectedResidenceHistoryVersion));
+                AddResidenceModalFieldErrors(model.Id.Value, refreshed.Residences);
                 return PartialView("Partials/_ResidenceModal", model);
             }
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
+        return Ok(new { success = true, refreshTarget = "#application-detail", refreshUrl = Url.Action(nameof(WizardFragment), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
     }
 
     [HttpGet]
@@ -371,7 +386,7 @@ public class ApplicationsController : Controller
             return PartialView("Partials/_DeleteResidenceModal", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
+        return Ok(new { success = true, refreshTarget = "#application-detail", refreshUrl = Url.Action(nameof(WizardFragment), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
     }
 
     [Authorize(Roles = AppRoles.Applicant)]
@@ -485,7 +500,7 @@ public class ApplicationsController : Controller
             return PartialView("Partials/_ReviewModal", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId }) });
+        return Ok(new { success = true, refreshTarget = "#application-detail, [data-application-grid]", refreshUrl = Url.Action(nameof(WizardFragment), new { id = model.ApplicationId }) });
     }
 
     [Authorize(Roles = AppRoles.PropertyManager)]
@@ -585,10 +600,14 @@ public class ApplicationsController : Controller
     }
 
     private void AddResidenceModalFieldErrors(
-        IReadOnlyDictionary<string, string[]> fieldErrors,
         int residenceId,
         IReadOnlyList<ResidenceDto> residences)
     {
+        // A new row's generated ID can change its sort position. Map errors from the
+        // persisted order, using the same section rules, so retry keeps its field errors.
+        var fieldErrors = ApplicationSectionRules.ValidateResidenceHistory(residences
+            .Select(r => new ResidenceInput(r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
+            .ToList());
         var index = -1;
         for (var i = 0; i < residences.Count; i++)
         {

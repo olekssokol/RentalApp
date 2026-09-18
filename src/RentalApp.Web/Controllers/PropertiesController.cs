@@ -26,6 +26,10 @@ public class PropertiesController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> List(CancellationToken ct) =>
+        PartialView("Partials/_PropertyList", await _properties.GetAllAsync(ct));
+
+    [HttpGet]
     public IActionResult CreateModal() => PartialView("Partials/_PropertyForm", new PropertyFormViewModel());
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -42,7 +46,7 @@ public class PropertiesController : Controller
             return PartialView("Partials/_PropertyForm", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Index)) });
+        return Ok(new { success = true, refreshTarget = "#property-list", refreshUrl = Url.Action(nameof(List)) });
     }
 
     [HttpGet]
@@ -80,7 +84,7 @@ public class PropertiesController : Controller
             return PartialView("Partials/_PropertyForm", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Index)) });
+        return Ok(new { success = true, refreshTarget = "#property-list", refreshUrl = Url.Action(nameof(List)) });
     }
 
     [HttpGet]
@@ -112,7 +116,7 @@ public class PropertiesController : Controller
             return PartialView("Partials/_DeletePropertyModal", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Index)) });
+        return Ok(new { success = true, refreshTarget = "#property-list", refreshUrl = Url.Action(nameof(List)) });
     }
 
     public async Task<IActionResult> Details(int id, CancellationToken ct)
