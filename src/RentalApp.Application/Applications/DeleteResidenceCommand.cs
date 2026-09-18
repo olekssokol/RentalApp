@@ -4,4 +4,5 @@ public record DeleteResidenceCommand(
     int ApplicationId,
     int ResidenceId,
     string UserId,
-    bool IsManager);
+    bool IsManager,
+    int ExpectedResidenceHistoryVersion);

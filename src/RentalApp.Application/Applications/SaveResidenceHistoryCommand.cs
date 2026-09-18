@@ -4,4 +4,5 @@ public record SaveResidenceHistoryCommand(
     int ApplicationId,
     string UserId,
     bool IsManager,
-    bool Advance);
+    bool Advance,
+    int ExpectedResidenceHistoryVersion);

@@ -1,4 +1,5 @@
 using RentalApp.Application.Common;
+using RentalApp.Domain.Services;
 
 namespace RentalApp.Application.Applications;
 
@@ -14,7 +15,7 @@ public class ApplicationQueryService : IApplicationQueryService
         var application = await _applications.GetDetailAsync(id, ct);
         if (application is null)
             return null;
-        if (!isManager && application.ApplicantUserId != userId)
+        if (!isManager && !ApplicationMembership.IsMember(application, userId))
             return null;
 
         return ApplicationMapper.ToDetail(application);

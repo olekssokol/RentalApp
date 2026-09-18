@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using RentalApp.Application.Applications;
 using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
+using RentalApp.Domain.Enums;
 using RentalApp.Infrastructure.Persistence;
 
 namespace RentalApp.Infrastructure.Applications;
@@ -21,6 +22,7 @@ public class RentalApplicationRepository : IRentalApplicationRepository
             .Include(a => a.Unit).ThenInclude(u => u.Property)
             .Include(a => a.Residences)
             .Include(a => a.StatusHistory)
+            .Include(a => a.Applicants)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public async Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default)
@@ -31,7 +33,7 @@ public class RentalApplicationRepository : IRentalApplicationRepository
             .AsQueryable();
 
         if (!query.IsManager)
-            applications = applications.Where(a => a.ApplicantUserId == query.UserId);
+            applications = applications.Where(a => a.Applicants.Any(m => m.UserId == query.UserId));
 
         if (query.Status.HasValue)
             applications = applications.Where(a => a.Status == query.Status.Value);
@@ -83,13 +85,20 @@ public class RentalApplicationRepository : IRentalApplicationRepository
     }
 
     public Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default) =>
-        _db.RentalApplications.FirstOrDefaultAsync(a => a.Id == id, ct);
+        _db.RentalApplications.Include(a => a.Applicants).FirstOrDefaultAsync(a => a.Id == id, ct);
+
+    public Task<RentalApplication?> GetWithMembersAsync(int id, CancellationToken ct = default) =>
+        _db.RentalApplications.Include(a => a.Applicants).FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default) =>
-        _db.RentalApplications.Include(a => a.Residences).FirstOrDefaultAsync(a => a.Id == id, ct);
+        _db.RentalApplications
+            .Include(a => a.Applicants)
+            .Include(a => a.Residences)
+            .FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default) =>
         _db.RentalApplications
+            .Include(a => a.Applicants)
             .Include(a => a.Residences)
             .Include(a => a.Unit).ThenInclude(u => u.Leases)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -108,12 +117,22 @@ public class RentalApplicationRepository : IRentalApplicationRepository
 
     public void RemoveResidence(ResidenceHistory residence) => _db.ResidenceHistories.Remove(residence);
 
+    public void AddApplicant(ApplicationApplicant applicant) => _db.ApplicationApplicants.Add(applicant);
+
+    public void RemoveApplicant(ApplicationApplicant applicant) => _db.ApplicationApplicants.Remove(applicant);
+
     public void AddLease(Lease lease) => _db.Leases.Add(lease);
 
     public void AddStatusHistory(ApplicationStatusHistory history) =>
         _db.ApplicationStatusHistories.Add(history);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+
+    public async Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken ct = default)
+    {
+        var transaction = await _db.Database.BeginTransactionAsync(ct);
+        return new EfApplicationTransaction(transaction);
+    }
 
     public async Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default)
     {
@@ -130,6 +149,57 @@ public class RentalApplicationRepository : IRentalApplicationRepository
         }
 
         return false;
+    }
+
+    public async Task<bool> TrySaveApplicantInfoAsync(
+        int applicationId,
+        int expectedVersion,
+        string? fullName,
+        string? phone,
+        string? email,
+        string? currentAddress,
+        bool applicantInfoSaved,
+        DateTime updatedAtUtc,
+        CancellationToken ct = default)
+    {
+        var rows = await _db.RentalApplications
+            .Where(a => a.Id == applicationId && a.ApplicantInfoVersion == expectedVersion)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.FullName, fullName)
+                .SetProperty(a => a.Phone, phone)
+                .SetProperty(a => a.Email, email)
+                .SetProperty(a => a.CurrentAddress, currentAddress)
+                .SetProperty(a => a.ApplicantInfoSaved, applicantInfoSaved)
+                .SetProperty(a => a.ApplicantInfoVersion, a => a.ApplicantInfoVersion + 1)
+                .SetProperty(a => a.UpdatedAtUtc, updatedAtUtc), ct);
+        return rows == 1;
+    }
+
+    public async Task<bool> TryBumpResidenceHistoryVersionAsync(
+        int applicationId,
+        int expectedVersion,
+        bool residenceHistorySaved,
+        DateTime updatedAtUtc,
+        CancellationToken ct = default)
+    {
+        var rows = await _db.RentalApplications
+            .Where(a => a.Id == applicationId && a.ResidenceHistoryVersion == expectedVersion)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.ResidenceHistorySaved, residenceHistorySaved)
+                .SetProperty(a => a.ResidenceHistoryVersion, a => a.ResidenceHistoryVersion + 1)
+                .SetProperty(a => a.UpdatedAtUtc, updatedAtUtc), ct);
+        return rows == 1;
+    }
+
+    public async Task AdvanceCurrentSectionIfBehindAsync(
+        int applicationId,
+        ApplicationWizardSection target,
+        CancellationToken ct = default)
+    {
+        await _db.RentalApplications
+            .Where(a => a.Id == applicationId && a.CurrentSection < target)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.CurrentSection, target), ct);
     }
 
     private sealed class EfApplicationTransaction : IApplicationTransaction

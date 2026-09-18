@@ -8,4 +8,5 @@ public record AddResidenceCommand(
     string? LandlordName,
     string? LandlordPhone,
     DateOnly? MoveInDate,
-    DateOnly? MoveOutDate);
+    DateOnly? MoveOutDate,
+    int ExpectedResidenceHistoryVersion);

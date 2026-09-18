@@ -1,6 +1,7 @@
 using RentalApp.Application.Applications;
 using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
+using RentalApp.Domain.Enums;
 
 namespace RentalApp.IntegrationTests.Support;
 
@@ -33,6 +34,7 @@ internal sealed class BarrierApplicationRepository : IRentalApplicationRepositor
         return application;
     }
 
+    public Task<RentalApplication?> GetWithMembersAsync(int id, CancellationToken ct = default) => _inner.GetWithMembersAsync(id, ct);
     public Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default) => _inner.GetWithResidencesAsync(id, ct);
 
     public async Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default)
@@ -48,11 +50,23 @@ internal sealed class BarrierApplicationRepository : IRentalApplicationRepositor
     public Task AddResidenceAsync(ResidenceHistory residence, CancellationToken ct = default) => _inner.AddResidenceAsync(residence, ct);
     public Task<ResidenceHistory?> GetResidenceAsync(int applicationId, int residenceId, CancellationToken ct = default) => _inner.GetResidenceAsync(applicationId, residenceId, ct);
     public void RemoveResidence(ResidenceHistory residence) => _inner.RemoveResidence(residence);
+    public void AddApplicant(ApplicationApplicant applicant) => _inner.AddApplicant(applicant);
+    public void RemoveApplicant(ApplicationApplicant applicant) => _inner.RemoveApplicant(applicant);
     public void AddLease(Lease lease) => _inner.AddLease(lease);
     public void AddStatusHistory(ApplicationStatusHistory history) => _inner.AddStatusHistory(history);
     public Task SaveChangesAsync(CancellationToken ct = default) => _inner.SaveChangesAsync(ct);
+    public Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken ct = default) => _inner.BeginTransactionAsync(ct);
     public Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default) => _inner.BeginSerializableAsync(ct);
     public bool IsSerializationFailure(Exception exception) => _inner.IsSerializationFailure(exception);
+    public Task<bool> TrySaveApplicantInfoAsync(
+        int applicationId, int expectedVersion, string? fullName, string? phone, string? email, string? currentAddress,
+        bool applicantInfoSaved, DateTime updatedAtUtc, CancellationToken ct = default) =>
+        _inner.TrySaveApplicantInfoAsync(applicationId, expectedVersion, fullName, phone, email, currentAddress, applicantInfoSaved, updatedAtUtc, ct);
+    public Task<bool> TryBumpResidenceHistoryVersionAsync(
+        int applicationId, int expectedVersion, bool residenceHistorySaved, DateTime updatedAtUtc, CancellationToken ct = default) =>
+        _inner.TryBumpResidenceHistoryVersionAsync(applicationId, expectedVersion, residenceHistorySaved, updatedAtUtc, ct);
+    public Task AdvanceCurrentSectionIfBehindAsync(int applicationId, ApplicationWizardSection target, CancellationToken ct = default) =>
+        _inner.AdvanceCurrentSectionIfBehindAsync(applicationId, target, ct);
 
     private void Wait(CancellationToken ct)
     {

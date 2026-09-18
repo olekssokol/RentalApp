@@ -37,6 +37,9 @@
     <form asp-action="Wizard" method="post">
         <input type="hidden" asp-for="Id" />
         <input type="hidden" asp-for="CurrentSection" />
+        <input type="hidden" asp-for="DisplaySection" />
+        <input type="hidden" asp-for="ApplicantInfoVersion" />
+        <input type="hidden" asp-for="ResidenceHistoryVersion" />
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
         @if (section == ApplicationWizardSection.ApplicantInfo)
@@ -54,9 +57,16 @@
 
         <div class="d-flex flex-wrap justify-content-between gap-2 mt-4 pt-3 border-top">
             <div class="d-flex gap-2 flex-wrap">
-                @if (Model.CanEdit && Model.CurrentSection != ApplicationWizardSection.ApplicantInfo)
+                @if (Model.CanEdit && Model.PreviousSection is { } editPrevious)
                 {
-                    <button type="submit" name="Action" value="Back" class="btn btn-outline-secondary" formnovalidate>Back</button>
+                    @if (Model.IsMultiMember)
+                    {
+                        <a class="btn btn-outline-secondary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@editPrevious">Back</a>
+                    }
+                    else
+                    {
+                        <button type="submit" name="Action" value="Back" class="btn btn-outline-secondary" formnovalidate>Back</button>
+                    }
                 }
                 @if (!Model.CanEdit && Model.PreviousSection is { } previous)
                 {
@@ -65,13 +75,16 @@
                 <a class="btn btn-link px-0" asp-action="Index">Back to list</a>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                @if (Model.CanEdit && Model.CurrentSection != ApplicationWizardSection.Summary)
+                @if (Model.CanEdit && Model.DisplaySection != ApplicationWizardSection.Summary)
                 {
                     <button type="submit" name="Action" value="Continue" class="btn btn-primary" formnovalidate>Continue</button>
                 }
-                @if (!Model.CanEdit && Model.NextSection is { } next)
+                @if ((!Model.CanEdit || Model.IsMultiMember) && Model.NextSection is { } next && Model.DisplaySection != ApplicationWizardSection.Summary)
                 {
-                    <a class="btn btn-outline-primary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@next">Next</a>
+                    @if (!Model.CanEdit)
+                    {
+                        <a class="btn btn-outline-primary" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@next">Next</a>
+                    }
                 }
                 @if (Model.CanSubmit)
                 {

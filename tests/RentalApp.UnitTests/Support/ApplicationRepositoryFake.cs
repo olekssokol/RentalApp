@@ -20,9 +20,20 @@ internal sealed class ApplicationRepositoryFake : IRentalApplicationRepository
     public List<ApplicationStatusHistory> History { get; } = [];
     public int SaveCount { get; private set; }
 
+    public ApplicationRepositoryFake()
+    {
+        Application.Applicants.Add(new ApplicationApplicant
+        {
+            RentalApplicationId = 1,
+            UserId = "owner",
+            AddedAtUtc = Application.CreatedAtUtc
+        });
+    }
+
     public Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default) =>
         Task.FromResult(id == Application.Id ? Application : null);
     public Task<RentalApplication?> GetDetailAsync(int id, CancellationToken ct = default) => GetByIdAsync(id, ct);
+    public Task<RentalApplication?> GetWithMembersAsync(int id, CancellationToken ct = default) => GetByIdAsync(id, ct);
     public Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default) => GetByIdAsync(id, ct);
     public Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default) => GetByIdAsync(id, ct);
     public Task<Unit?> GetUnitWithLeasesAsync(int unitId, CancellationToken ct = default) => Task.FromResult<Unit?>(Application.Unit);
@@ -41,14 +52,56 @@ internal sealed class ApplicationRepositoryFake : IRentalApplicationRepository
     public Task<ResidenceHistory?> GetResidenceAsync(int applicationId, int residenceId, CancellationToken ct = default) =>
         Task.FromResult(Application.Residences.SingleOrDefault(r => r.RentalApplicationId == applicationId && r.Id == residenceId));
     public void RemoveResidence(ResidenceHistory residence) => Application.Residences.Remove(residence);
+    public void AddApplicant(ApplicationApplicant applicant) => Application.Applicants.Add(applicant);
+    public void RemoveApplicant(ApplicationApplicant applicant) => Application.Applicants.Remove(applicant);
     public void AddStatusHistory(ApplicationStatusHistory history) => History.Add(history);
     public Task SaveChangesAsync(CancellationToken ct = default) { SaveCount++; return Task.CompletedTask; }
 
     public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => throw new NotSupportedException();
     public void AddLease(Lease lease) => throw new NotSupportedException();
+    public Task<IApplicationTransaction> BeginTransactionAsync(CancellationToken ct = default) =>
+        Task.FromResult<IApplicationTransaction>(new NoOpTransaction());
     public Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default) =>
         Task.FromResult<IApplicationTransaction>(new NoOpTransaction());
     public bool IsSerializationFailure(Exception exception) => false;
+
+    public Task<bool> TrySaveApplicantInfoAsync(
+        int applicationId, int expectedVersion, string? fullName, string? phone, string? email, string? currentAddress,
+        bool applicantInfoSaved, DateTime updatedAtUtc, CancellationToken ct = default)
+    {
+        if (applicationId != Application.Id || Application.ApplicantInfoVersion != expectedVersion)
+            return Task.FromResult(false);
+
+        Application.FullName = fullName;
+        Application.Phone = phone;
+        Application.Email = email;
+        Application.CurrentAddress = currentAddress;
+        Application.ApplicantInfoSaved = applicantInfoSaved;
+        Application.ApplicantInfoVersion++;
+        Application.UpdatedAtUtc = updatedAtUtc;
+        SaveCount++;
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryBumpResidenceHistoryVersionAsync(
+        int applicationId, int expectedVersion, bool residenceHistorySaved, DateTime updatedAtUtc, CancellationToken ct = default)
+    {
+        if (applicationId != Application.Id || Application.ResidenceHistoryVersion != expectedVersion)
+            return Task.FromResult(false);
+
+        Application.ResidenceHistorySaved = residenceHistorySaved;
+        Application.ResidenceHistoryVersion++;
+        Application.UpdatedAtUtc = updatedAtUtc;
+        SaveCount++;
+        return Task.FromResult(true);
+    }
+
+    public Task AdvanceCurrentSectionIfBehindAsync(int applicationId, ApplicationWizardSection target, CancellationToken ct = default)
+    {
+        if (applicationId == Application.Id && Application.CurrentSection < target)
+            Application.CurrentSection = target;
+        return Task.CompletedTask;
+    }
 
     private sealed class NoOpTransaction : IApplicationTransaction
     {

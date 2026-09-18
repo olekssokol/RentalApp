@@ -68,6 +68,8 @@ internal sealed class SqlTestDatabase : IAsyncDisposable
             ResidenceHistorySaved = true,
             UpdatedAtUtc = DateTime.UtcNow.AddMinutes(index)
         }).ToList();
+        foreach (var app in applications)
+            app.Applicants.Add(new ApplicationApplicant { UserId = app.ApplicantUserId, AddedAtUtc = DateTime.UtcNow });
         db.RentalApplications.AddRange(applications);
         await db.SaveChangesAsync();
         return new TestGraph(first.Id, second.Id, units[0].Id, units[1].Id, applications.Select(a => a.Id).ToArray());

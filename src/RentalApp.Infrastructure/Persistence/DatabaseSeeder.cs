@@ -120,6 +120,7 @@ public static class DatabaseSeeder
                 CreatedAtUtc = DateTime.UtcNow.AddDays(-faker.Random.Int(2, 30)),
                 UpdatedAtUtc = DateTime.UtcNow.AddDays(-faker.Random.Int(0, 2))
             };
+            app.Applicants.Add(new ApplicationApplicant { UserId = user.Id, AddedAtUtc = app.CreatedAtUtc });
             db.RentalApplications.Add(app);
             await db.SaveChangesAsync();
 
@@ -215,6 +216,17 @@ public static class DatabaseSeeder
         var draft = await CreateApp(applicants[0], availableUnits[0], ApplicationStatus.Draft, true);
         draft.CurrentSection = ApplicationWizardSection.ApplicantInfo;
         draft.ResidenceHistorySaved = false;
+        await db.SaveChangesAsync();
+
+        // Multi-applicant demo: creator applicant1 + co-applicant applicant2
+        var multi = await CreateApp(applicants[0], availableUnits[6], ApplicationStatus.Draft, true);
+        multi.CurrentSection = ApplicationWizardSection.ApplicantInfo;
+        multi.Applicants.Add(new ApplicationApplicant
+        {
+            RentalApplicationId = multi.Id,
+            UserId = applicants[1].Id,
+            AddedAtUtc = DateTime.UtcNow
+        });
         await db.SaveChangesAsync();
 
         await CreateApp(applicants[0], availableUnits[1], ApplicationStatus.Submitted, true);

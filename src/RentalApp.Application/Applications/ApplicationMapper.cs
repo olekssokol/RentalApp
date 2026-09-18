@@ -18,6 +18,12 @@ internal static class ApplicationMapper
             .Select(r => new ResidenceInput(r.Address, r.LandlordName, r.LandlordPhone, r.MoveInDate, r.MoveOutDate))
             .ToList();
 
+        var members = application.Applicants
+            .OrderBy(a => a.AddedAtUtc)
+            .ThenBy(a => a.UserId)
+            .Select(a => new ApplicationMemberDto(a.UserId, a.UserId == application.ApplicantUserId))
+            .ToList();
+
         return new(
             application.Id,
             application.Status,
@@ -32,10 +38,13 @@ internal static class ApplicationMapper
             application.CurrentAddress,
             application.ApplicantInfoSaved,
             application.ResidenceHistorySaved,
+            application.ApplicantInfoVersion,
+            application.ResidenceHistoryVersion,
             ApplicationRules.CanEditSections(application.Status),
             application.ClaimedByUserId,
             application.ClaimedAtUtc,
             ResolveClaimedByDisplayName(application),
+            members,
             residences,
             application.StatusHistory
                 .OrderByDescending(h => h.ChangedAtUtc)

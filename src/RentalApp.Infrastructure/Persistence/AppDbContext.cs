@@ -17,6 +17,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<UnitType> UnitTypes => Set<UnitType>();
     public DbSet<RentalApplication> RentalApplications => Set<RentalApplication>();
+    public DbSet<ApplicationApplicant> ApplicationApplicants => Set<ApplicationApplicant>();
     public DbSet<ResidenceHistory> ResidenceHistories => Set<ResidenceHistory>();
     public DbSet<ApplicationStatusHistory> ApplicationStatusHistories => Set<ApplicationStatusHistory>();
     public DbSet<Lease> Leases => Set<Lease>();
@@ -61,6 +62,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.HasOne(x => x.Unit).WithMany(u => u.Applications).HasForeignKey(x => x.UnitId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.ApplicantUserId);
+        });
+
+        builder.Entity<ApplicationApplicant>(e =>
+        {
+            e.HasKey(x => new { x.RentalApplicationId, x.UserId });
+            e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+            e.HasOne(x => x.RentalApplication).WithMany(a => a.Applicants)
+                .HasForeignKey(x => x.RentalApplicationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.UserId);
         });
 
         builder.Entity<ResidenceHistory>(e =>

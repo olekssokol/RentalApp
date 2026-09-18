@@ -8,4 +8,5 @@ public record SaveApplicantInfoCommand(
     string? Phone,
     string? Email,
     string? CurrentAddress,
-    bool Advance);
+    bool Advance,
+    int ExpectedApplicantInfoVersion);

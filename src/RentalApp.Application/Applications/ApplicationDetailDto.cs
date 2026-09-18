@@ -17,10 +17,13 @@ public record ApplicationDetailDto(
     string? CurrentAddress,
     bool ApplicantInfoSaved,
     bool ResidenceHistorySaved,
+    int ApplicantInfoVersion,
+    int ResidenceHistoryVersion,
     bool CanEdit,
     string? ClaimedByUserId,
     DateTime? ClaimedAtUtc,
     string? ClaimedByDisplayName,
+    IReadOnlyList<ApplicationMemberDto> Members,
     IReadOnlyList<ResidenceDto> Residences,
     IReadOnlyList<StatusHistoryDto> StatusHistory,
     IReadOnlyList<SubmissionBlocker> SubmissionBlockers);

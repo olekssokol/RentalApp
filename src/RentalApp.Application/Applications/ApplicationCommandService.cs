@@ -29,6 +29,11 @@ public class ApplicationCommandService : IApplicationCommandService
             Status = ApplicationStatus.Draft,
             CurrentSection = ApplicationWizardSection.ApplicantInfo
         };
+        application.Applicants.Add(new ApplicationApplicant
+        {
+            UserId = command.ApplicantUserId,
+            AddedAtUtc = DateTime.UtcNow
+        });
         await _applications.AddAsync(application, ct);
         await _applications.SaveChangesAsync(ct);
 
@@ -39,17 +44,13 @@ public class ApplicationCommandService : IApplicationCommandService
 
     public async Task<Result<SaveSectionResult>> SaveApplicantInfoAsync(SaveApplicantInfoCommand command, CancellationToken ct = default)
     {
-        var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
+        var application = await _applications.GetWithMembersAsync(command.ApplicationId, ct);
         if (application is null)
             return Result.Failure<SaveSectionResult>("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return Result.Failure<SaveSectionResult>(access.Error!);
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return Result.Failure<SaveSectionResult>(edit.Error!);
 
         var fullName = ApplicationSectionRules.NormalizeOptional(command.FullName);
         var phone = ApplicationSectionRules.NormalizeOptional(command.Phone);
@@ -60,20 +61,27 @@ public class ApplicationCommandService : IApplicationCommandService
         if (storage.IsFailure)
             return Result.Failure<SaveSectionResult>(storage.Error!);
 
-        application.FullName = fullName;
-        application.Phone = phone;
-        application.Email = email;
-        application.CurrentAddress = currentAddress;
-
         var errors = ApplicationSectionRules.ValidateApplicantInfo(fullName, phone, email, currentAddress);
         var isValid = errors.Count == 0;
-        application.ApplicantInfoSaved = isValid;
-        application.UpdatedAtUtc = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+
+        var saved = await _applications.TrySaveApplicantInfoAsync(
+            command.ApplicationId,
+            command.ExpectedApplicantInfoVersion,
+            fullName,
+            phone,
+            email,
+            currentAddress,
+            isValid,
+            now,
+            ct);
+        if (!saved)
+            return Result.Failure<SaveSectionResult>(ApplicationMembership.StaleSectionMessage);
 
         if (isValid && command.Advance)
-            application.CurrentSection = ApplicationWizardSection.ResidenceHistory;
+            await _applications.AdvanceCurrentSectionIfBehindAsync(
+                command.ApplicationId, ApplicationWizardSection.ResidenceHistory, ct);
 
-        await _applications.SaveChangesAsync(ct);
         return Result.Success(isValid ? SaveSectionResult.Valid() : SaveSectionResult.Invalid(errors));
     }
 
@@ -83,51 +91,49 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure<SaveSectionResult>("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return Result.Failure<SaveSectionResult>(access.Error!);
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return Result.Failure<SaveSectionResult>(edit.Error!);
 
         var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
         var isValid = errors.Count == 0;
         var wasSaved = application.ResidenceHistorySaved;
-        application.ResidenceHistorySaved = isValid;
 
-        if (isValid)
+        if (!isValid && !wasSaved)
         {
-            application.UpdatedAtUtc = DateTime.UtcNow;
-            if (command.Advance)
-                application.CurrentSection = ApplicationWizardSection.Summary;
-            await _applications.SaveChangesAsync(ct);
-            return Result.Success(SaveSectionResult.Valid());
+            // Nothing to persist; do not bump version or UpdatedAt.
+            return Result.Success(SaveSectionResult.Invalid(errors));
         }
 
-        // Invalid: stay on section. Persist only when the progress flag must flip true → false.
-        if (wasSaved)
-        {
-            application.UpdatedAtUtc = DateTime.UtcNow;
-            await _applications.SaveChangesAsync(ct);
-        }
+        await using var tx = await _applications.BeginTransactionAsync(ct);
+        var bumped = await _applications.TryBumpResidenceHistoryVersionAsync(
+            command.ApplicationId,
+            command.ExpectedResidenceHistoryVersion,
+            isValid,
+            DateTime.UtcNow,
+            ct);
+        if (!bumped)
+            return Result.Failure<SaveSectionResult>(ApplicationMembership.StaleSectionMessage);
 
-        return Result.Success(SaveSectionResult.Invalid(errors));
+        if (isValid && command.Advance)
+            await _applications.AdvanceCurrentSectionIfBehindAsync(
+                command.ApplicationId, ApplicationWizardSection.Summary, ct);
+
+        await tx.CommitAsync(ct);
+        return Result.Success(isValid ? SaveSectionResult.Valid() : SaveSectionResult.Invalid(errors));
     }
 
     public async Task<Result> GoBackAsync(GoBackCommand command, CancellationToken ct = default)
     {
-        var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
+        // Navigation is display-driven for multi-member; GoBack only adjusts furthest progress metadata downward for the actor's UX when single-path.
+        // Keep behavior: move CurrentSection back one step when behind Summary — still membership-gated.
+        var application = await _applications.GetWithMembersAsync(command.ApplicationId, ct);
         if (application is null)
             return Result.Failure("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return access;
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return edit;
 
         application.CurrentSection = application.CurrentSection switch
         {
@@ -146,11 +152,8 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure("Application not found.");
 
-        if (application.ApplicantUserId != command.UserId)
+        if (!ApplicationMembership.IsMember(application, command.UserId))
             return Result.Failure("You do not own this application.");
-
-        if (application.CurrentSection != ApplicationWizardSection.Summary)
-            return Result.Failure("Submit is only available from the summary.");
 
         var blockers = ApplicationSectionRules.GetSubmissionBlockers(
             application.FullName,
@@ -178,11 +181,11 @@ public class ApplicationCommandService : IApplicationCommandService
 
     public async Task<Result> WithdrawAsync(WithdrawApplicationCommand command, CancellationToken ct = default)
     {
-        var application = await _applications.GetByIdAsync(command.ApplicationId, ct);
+        var application = await _applications.GetWithMembersAsync(command.ApplicationId, ct);
         if (application is null)
             return Result.Failure("Application not found.");
 
-        if (application.ApplicantUserId != command.UserId)
+        if (!ApplicationMembership.IsMember(application, command.UserId))
             return Result.Failure("You do not own this application.");
 
         if (!ApplicationRules.CanWithdraw(application.Status))
@@ -202,13 +205,9 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure<ResidenceSaveResult>("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return Result.Failure<ResidenceSaveResult>(access.Error!);
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return Result.Failure<ResidenceSaveResult>(edit.Error!);
 
         var address = ApplicationSectionRules.NormalizeOptional(command.Address);
         var landlordName = ApplicationSectionRules.NormalizeOptional(command.LandlordName);
@@ -227,13 +226,24 @@ public class ApplicationCommandService : IApplicationCommandService
             MoveInDate = command.MoveInDate,
             MoveOutDate = command.MoveOutDate
         };
-        await _applications.AddResidenceAsync(residence, ct);
 
-        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
+        var projected = application.Residences.Append(residence).ToList();
+        var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(projected));
         var isValid = errors.Count == 0;
-        application.ResidenceHistorySaved = isValid;
-        application.UpdatedAtUtc = DateTime.UtcNow;
+
+        await using var tx = await _applications.BeginTransactionAsync(ct);
+        var bumped = await _applications.TryBumpResidenceHistoryVersionAsync(
+            command.ApplicationId,
+            command.ExpectedResidenceHistoryVersion,
+            isValid,
+            DateTime.UtcNow,
+            ct);
+        if (!bumped)
+            return Result.Failure<ResidenceSaveResult>(ApplicationMembership.StaleSectionMessage);
+
+        await _applications.AddResidenceAsync(residence, ct);
         await _applications.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         return Result.Success(new ResidenceSaveResult(residence.Id, isValid, errors));
     }
@@ -244,13 +254,9 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure<SaveSectionResult>("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return Result.Failure<SaveSectionResult>(access.Error!);
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return Result.Failure<SaveSectionResult>(edit.Error!);
 
         var residence = application.Residences.FirstOrDefault(r => r.Id == command.ResidenceId)
             ?? await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
@@ -265,20 +271,30 @@ public class ApplicationCommandService : IApplicationCommandService
         if (storage.IsFailure)
             return Result.Failure<SaveSectionResult>(storage.Error!);
 
+        await using var tx = await _applications.BeginTransactionAsync(ct);
+
         residence.Address = address;
         residence.LandlordName = landlordName;
         residence.LandlordPhone = landlordPhone;
         residence.MoveInDate = command.MoveInDate;
         residence.MoveOutDate = command.MoveOutDate;
-
         if (!application.Residences.Any(r => r.Id == residence.Id))
             application.Residences.Add(residence);
 
         var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
         var isValid = errors.Count == 0;
-        application.ResidenceHistorySaved = isValid;
-        application.UpdatedAtUtc = DateTime.UtcNow;
+
+        var bumped = await _applications.TryBumpResidenceHistoryVersionAsync(
+            command.ApplicationId,
+            command.ExpectedResidenceHistoryVersion,
+            isValid,
+            DateTime.UtcNow,
+            ct);
+        if (!bumped)
+            return Result.Failure<SaveSectionResult>(ApplicationMembership.StaleSectionMessage);
+
         await _applications.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         return Result.Success(isValid ? SaveSectionResult.Valid() : SaveSectionResult.Invalid(errors));
     }
@@ -289,24 +305,81 @@ public class ApplicationCommandService : IApplicationCommandService
         if (application is null)
             return Result.Failure("Application not found.");
 
-        var access = EnsureApplicantAccess(application, command.UserId, command.IsManager);
+        var access = EnsureMemberEdit(application, command.UserId, command.IsManager);
         if (access.IsFailure)
             return access;
-
-        var edit = ApplicationRules.EnsureCanEdit(application.Status);
-        if (edit.IsFailure)
-            return edit;
 
         var residence = application.Residences.FirstOrDefault(r => r.Id == command.ResidenceId)
             ?? await _applications.GetResidenceAsync(command.ApplicationId, command.ResidenceId, ct);
         if (residence is null)
             return Result.Failure("Residence not found.");
 
+        await using var tx = await _applications.BeginTransactionAsync(ct);
+
         _applications.RemoveResidence(residence);
         application.Residences.Remove(residence);
-
         var errors = ApplicationSectionRules.ValidateResidenceHistory(ToResidenceInputs(application.Residences));
-        application.ResidenceHistorySaved = errors.Count == 0;
+        var isValid = errors.Count == 0;
+
+        var bumped = await _applications.TryBumpResidenceHistoryVersionAsync(
+            command.ApplicationId,
+            command.ExpectedResidenceHistoryVersion,
+            isValid,
+            DateTime.UtcNow,
+            ct);
+        if (!bumped)
+            return Result.Failure(ApplicationMembership.StaleSectionMessage);
+
+        await _applications.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Result.Success();
+    }
+
+    public async Task<Result> AddCoApplicantAsync(AddCoApplicantCommand command, CancellationToken ct = default)
+    {
+        var application = await _applications.GetWithMembersAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure("Application not found.");
+
+        var access = EnsureMemberEdit(application, command.ActorUserId, isManager: false);
+        if (access.IsFailure)
+            return access;
+
+        if (ApplicationMembership.IsMember(application, command.TargetUserId))
+            return Result.Failure("That applicant is already on this application.");
+
+        _applications.AddApplicant(new ApplicationApplicant
+        {
+            RentalApplicationId = application.Id,
+            UserId = command.TargetUserId,
+            AddedAtUtc = DateTime.UtcNow
+        });
+        application.UpdatedAtUtc = DateTime.UtcNow;
+        await _applications.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
+    public async Task<Result> RemoveCoApplicantAsync(RemoveCoApplicantCommand command, CancellationToken ct = default)
+    {
+        var application = await _applications.GetWithMembersAsync(command.ApplicationId, ct);
+        if (application is null)
+            return Result.Failure("Application not found.");
+
+        var access = EnsureMemberEdit(application, command.ActorUserId, isManager: false);
+        if (access.IsFailure)
+            return access;
+
+        if (command.TargetUserId == application.ApplicantUserId)
+            return Result.Failure("The creator cannot be removed from the application.");
+
+        var member = application.Applicants.FirstOrDefault(a => a.UserId == command.TargetUserId);
+        if (member is null)
+            return Result.Failure("That applicant is not on this application.");
+
+        if (application.Applicants.Count <= 1)
+            return Result.Failure("An application must keep at least one applicant.");
+
+        _applications.RemoveApplicant(member);
         application.UpdatedAtUtc = DateTime.UtcNow;
         await _applications.SaveChangesAsync(ct);
         return Result.Success();
@@ -456,14 +529,16 @@ public class ApplicationCommandService : IApplicationCommandService
         application.ClaimedAtUtc = null;
     }
 
-    private static Result EnsureApplicantAccess(RentalApplication application, string userId, bool isManager)
+    /// <summary>Member applicants may edit; managers never gain applicant-section edit through this path.</summary>
+    private static Result EnsureMemberEdit(RentalApplication application, string userId, bool isManager)
     {
         if (isManager)
-            return Result.Success();
+            return Result.Failure("Property managers cannot edit applicant sections.");
 
-        return application.ApplicantUserId == userId
-            ? Result.Success()
-            : Result.Failure("You do not own this application.");
+        if (!ApplicationMembership.IsMember(application, userId))
+            return Result.Failure("You do not own this application.");
+
+        return ApplicationRules.EnsureCanEdit(application.Status);
     }
 
     private static IReadOnlyList<ResidenceInput> ToResidenceInputs(IEnumerable<ResidenceHistory> residences) =>

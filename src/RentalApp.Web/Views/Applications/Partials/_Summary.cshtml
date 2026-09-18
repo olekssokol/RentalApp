@@ -13,14 +13,7 @@
             <div class="mb-2">
                 <div class="fw-semibold">
                     @(group.Key == ApplicationWizardSection.ApplicantInfo ? "Applicant information" : "Residence history")
-                    @if (Model.IsManager)
-                    {
-                        <a class="ms-2 fw-normal" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@group.Key">View section</a>
-                    }
-                    else if (Model.CanEdit)
-                    {
-                        <span class="ms-2 fw-normal text-muted">Use Back to edit</span>
-                    }
+                    <a class="ms-2 fw-normal" asp-action="Wizard" asp-route-id="@Model.Id" asp-route-section="@group.Key">@(Model.CanEdit ? "Fix section" : "View section")</a>
                 </div>
                 <ul class="mb-0 ps-3">
                     @foreach (var blocker in group)
@@ -32,6 +25,45 @@
         }
     </div>
 }
+
+<section class="mb-4">
+    <h3 class="h6">Applicants on this application</h3>
+    <ul class="mb-2 ps-3">
+        @foreach (var member in Model.Members)
+        {
+            <li class="mb-1">
+                @member.DisplayName
+                @if (member.IsCreator)
+                {
+                    <span class="text-muted">(creator)</span>
+                }
+                @if (Model.CanEdit && !member.IsCreator)
+                {
+                    <form asp-action="RemoveCoApplicant" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="userId" value="@member.UserId" />
+                        <button type="submit" class="btn btn-link btn-sm text-danger p-0 align-baseline">Remove</button>
+                    </form>
+                }
+            </li>
+        }
+    </ul>
+    @if (Model.CanEdit)
+    {
+        <form asp-action="AddCoApplicant" method="post" class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <div class="col-md-6">
+                <label class="form-label" for="coApplicantEmail">Add co-applicant by email</label>
+                <input id="coApplicantEmail" name="email" class="form-control" type="email" asp-for="CoApplicantEmail" placeholder="applicant@rental.local" />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-primary">Add</button>
+            </div>
+        </form>
+    }
+</section>
 
 <div class="summary-grid">
     <section class="summary-block">

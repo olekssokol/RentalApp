@@ -4,6 +4,7 @@ namespace RentalApp.Domain.Entities;
 
 public class RentalApplication : Entity
 {
+    /// <summary>Creator / started-by metadata only — not an ownership source. Membership is <see cref="Applicants"/>.</summary>
     public string ApplicantUserId { get; set; } = string.Empty;
 
     public int UnitId { get; set; }
@@ -24,9 +25,16 @@ public class RentalApplication : Entity
     public bool ApplicantInfoSaved { get; set; }
     public bool ResidenceHistorySaved { get; set; }
 
+    /// <summary>Optimistic concurrency token for Applicant Info only (bumped via conditional UPDATE).</summary>
+    public int ApplicantInfoVersion { get; set; }
+
+    /// <summary>Optimistic concurrency token for Residence History only (bumped via conditional UPDATE).</summary>
+    public int ResidenceHistoryVersion { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    public ICollection<ApplicationApplicant> Applicants { get; set; } = new List<ApplicationApplicant>();
     public ICollection<ResidenceHistory> Residences { get; set; } = new List<ResidenceHistory>();
     public ICollection<ApplicationStatusHistory> StatusHistory { get; set; } = new List<ApplicationStatusHistory>();
     public ICollection<PropertyManagerNote> PropertyManagerNotes { get; set; } = new List<PropertyManagerNote>();

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using RentalApp.Application.Applications;
@@ -19,17 +20,20 @@ public class ApplicationsController : Controller
     private readonly IApplicationCommandService _commands;
     private readonly IPropertyManagerNoteService _notes;
     private readonly IPropertyService _properties;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public ApplicationsController(
         IApplicationQueryService queries,
         IApplicationCommandService commands,
         IPropertyManagerNoteService notes,
-        IPropertyService properties)
+        IPropertyService properties,
+        UserManager<ApplicationUser> userManager)
     {
         _queries = queries;
         _commands = commands;
         _notes = notes;
         _properties = properties;
+        _userManager = userManager;
     }
 
     public async Task<IActionResult> Index(
@@ -119,7 +123,7 @@ public class ApplicationsController : Controller
                 ViewData["PropertyManagerNotes"] = BuildNotesViewModel(id, notes.Value!);
         }
 
-        return View(ApplicationWizardViewModel.From(detail, isManager, User.GetUserId(), section));
+        return View(await BuildWizardAsync(detail, isManager, User.GetUserId(), section, ct));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -133,11 +137,15 @@ public class ApplicationsController : Controller
         var isManager = User.IsManager();
         var canEdit = detail.CanEdit && !isManager;
         var action = model.Action ?? "Continue";
+        var displaySection = model.DisplaySection;
 
         if (action == "Back")
         {
             if (!canEdit)
-                return RedirectToAction(nameof(Wizard), new { id = model.Id });
+                return RedirectToAction(nameof(Wizard), new { id = model.Id, section = model.PreviousSection });
+
+            if (detail.Members.Count > 1)
+                return RedirectToAction(nameof(Wizard), new { id = model.Id, section = model.PreviousSection });
 
             var back = await _commands.GoBackAsync(new GoBackCommand(model.Id, userId, isManager), ct);
             if (back.IsFailure)
@@ -151,23 +159,25 @@ public class ApplicationsController : Controller
             if (submit.IsFailure)
             {
                 TempData["Error"] = submit.Error;
-                return RedirectToAction(nameof(Wizard), new { id = model.Id });
+                return RedirectToAction(nameof(Wizard), new { id = model.Id, section = ApplicationWizardSection.Summary });
             }
 
             TempData["Success"] = "Application submitted.";
-            return RedirectToAction(nameof(Wizard), new { id = model.Id });
+            return RedirectToAction(nameof(Wizard), new { id = model.Id, section = ApplicationWizardSection.Summary });
         }
 
         if (!canEdit)
-            return RedirectToAction(nameof(Wizard), new { id = model.Id });
+            return RedirectToAction(nameof(Wizard), new { id = model.Id, section = displaySection });
 
-        if (detail.CurrentSection == ApplicationWizardSection.ApplicantInfo)
+        if (displaySection == ApplicationWizardSection.ApplicantInfo)
         {
             var save = await _commands.SaveApplicantInfoAsync(
-                new SaveApplicantInfoCommand(model.Id, userId, isManager, model.FullName, model.Phone, model.Email, model.CurrentAddress, Advance: true), ct);
+                new SaveApplicantInfoCommand(
+                    model.Id, userId, isManager, model.FullName, model.Phone, model.Email, model.CurrentAddress,
+                    Advance: true, model.ApplicantInfoVersion), ct);
             if (save.IsFailure)
             {
-                var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
+                var vm = await BuildWizardAsync(detail, isManager, userId, displaySection, ct);
                 vm.FullName = model.FullName;
                 vm.Phone = model.Phone;
                 vm.Email = model.Email;
@@ -179,7 +189,7 @@ public class ApplicationsController : Controller
             if (!save.Value!.IsValid)
             {
                 var refreshed = await GetDetailAsync(model.Id, ct);
-                var vm = ApplicationWizardViewModel.From(refreshed!, isManager, userId);
+                var vm = await BuildWizardAsync(refreshed!, isManager, userId, displaySection, ct);
                 vm.FullName = model.FullName;
                 vm.Phone = model.Phone;
                 vm.Email = model.Email;
@@ -187,14 +197,17 @@ public class ApplicationsController : Controller
                 AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
+
+            return RedirectToAction(nameof(Wizard), new { id = model.Id, section = ApplicationWizardSection.ResidenceHistory });
         }
-        else if (detail.CurrentSection == ApplicationWizardSection.ResidenceHistory)
+
+        if (displaySection == ApplicationWizardSection.ResidenceHistory)
         {
             var save = await _commands.SaveResidenceHistoryAsync(
-                new SaveResidenceHistoryCommand(model.Id, userId, isManager, Advance: true), ct);
+                new SaveResidenceHistoryCommand(model.Id, userId, isManager, Advance: true, model.ResidenceHistoryVersion), ct);
             if (save.IsFailure)
             {
-                var vm = ApplicationWizardViewModel.From(detail, isManager, userId);
+                var vm = await BuildWizardAsync(detail, isManager, userId, displaySection, ct);
                 ModelState.AddModelError(string.Empty, save.Error!);
                 return View(vm);
             }
@@ -202,13 +215,15 @@ public class ApplicationsController : Controller
             if (!save.Value!.IsValid)
             {
                 var refreshed = await GetDetailAsync(model.Id, ct);
-                var vm = ApplicationWizardViewModel.From(refreshed!, isManager, userId);
+                var vm = await BuildWizardAsync(refreshed!, isManager, userId, displaySection, ct);
                 AddFieldErrors(save.Value.FieldErrors);
                 return View(vm);
             }
+
+            return RedirectToAction(nameof(Wizard), new { id = model.Id, section = ApplicationWizardSection.Summary });
         }
 
-        return RedirectToAction(nameof(Wizard), new { id = model.Id });
+        return RedirectToAction(nameof(Wizard), new { id = model.Id, section = displaySection });
     }
 
     [Authorize(Roles = AppRoles.Applicant)]
@@ -230,7 +245,12 @@ public class ApplicationsController : Controller
             return Forbid();
 
         if (id is null)
-            return PartialView("Partials/_ResidenceModal", new ResidenceFormViewModel { ApplicationId = applicationId, MoveInDate = DateOnly.FromDateTime(DateTime.Today.AddYears(-2)) });
+            return PartialView("Partials/_ResidenceModal", new ResidenceFormViewModel
+            {
+                ApplicationId = applicationId,
+                MoveInDate = DateOnly.FromDateTime(DateTime.Today.AddYears(-2)),
+                ExpectedResidenceHistoryVersion = detail.ResidenceHistoryVersion
+            });
 
         var residence = detail.Residences.FirstOrDefault(r => r.Id == id);
         if (residence is null)
@@ -244,7 +264,8 @@ public class ApplicationsController : Controller
             LandlordName = residence.LandlordName,
             LandlordPhone = residence.LandlordPhone,
             MoveInDate = residence.MoveInDate,
-            MoveOutDate = residence.MoveOutDate
+            MoveOutDate = residence.MoveOutDate,
+            ExpectedResidenceHistoryVersion = detail.ResidenceHistoryVersion
         });
     }
 
@@ -263,7 +284,9 @@ public class ApplicationsController : Controller
         if (model.Id is null)
         {
             var create = await _commands.AddResidenceAsync(
-                new AddResidenceCommand(model.ApplicationId, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate, model.MoveOutDate), ct);
+                new AddResidenceCommand(
+                    model.ApplicationId, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone,
+                    model.MoveInDate, model.MoveOutDate, model.ExpectedResidenceHistoryVersion), ct);
             if (create.IsFailure)
             {
                 ModelState.AddModelError(string.Empty, create.Error!);
@@ -274,14 +297,17 @@ public class ApplicationsController : Controller
             {
                 model.Id = create.Value.ResidenceId;
                 var refreshed = await GetDetailAsync(model.ApplicationId, ct);
-                AddResidenceModalFieldErrors(create.Value.FieldErrors, create.Value.ResidenceId, refreshed!.Residences);
+                model.ExpectedResidenceHistoryVersion = refreshed!.ResidenceHistoryVersion;
+                AddResidenceModalFieldErrors(create.Value.FieldErrors, create.Value.ResidenceId, refreshed.Residences);
                 return PartialView("Partials/_ResidenceModal", model);
             }
         }
         else
         {
             var update = await _commands.UpdateResidenceAsync(
-                new UpdateResidenceCommand(model.ApplicationId, model.Id.Value, userId, isManager, model.Address, model.LandlordName, model.LandlordPhone, model.MoveInDate, model.MoveOutDate), ct);
+                new UpdateResidenceCommand(
+                    model.ApplicationId, model.Id.Value, userId, isManager, model.Address, model.LandlordName,
+                    model.LandlordPhone, model.MoveInDate, model.MoveOutDate, model.ExpectedResidenceHistoryVersion), ct);
             if (update.IsFailure)
             {
                 ModelState.AddModelError(string.Empty, update.Error!);
@@ -291,12 +317,13 @@ public class ApplicationsController : Controller
             if (!update.Value!.IsValid)
             {
                 var refreshed = await GetDetailAsync(model.ApplicationId, ct);
-                AddResidenceModalFieldErrors(update.Value.FieldErrors, model.Id.Value, refreshed!.Residences);
+                model.ExpectedResidenceHistoryVersion = refreshed!.ResidenceHistoryVersion;
+                AddResidenceModalFieldErrors(update.Value.FieldErrors, model.Id.Value, refreshed.Residences);
                 return PartialView("Partials/_ResidenceModal", model);
             }
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId }) });
+        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
     }
 
     [HttpGet]
@@ -316,7 +343,8 @@ public class ApplicationsController : Controller
         {
             ApplicationId = applicationId,
             Id = residence.Id,
-            Address = residence.Address
+            Address = residence.Address,
+            ExpectedResidenceHistoryVersion = detail.ResidenceHistoryVersion
         });
     }
 
@@ -335,14 +363,64 @@ public class ApplicationsController : Controller
 
         model.Address = residence.Address;
         var result = await _commands.DeleteResidenceAsync(
-            new DeleteResidenceCommand(model.ApplicationId, model.Id, User.GetUserId(), User.IsManager()), ct);
+            new DeleteResidenceCommand(
+                model.ApplicationId, model.Id, User.GetUserId(), User.IsManager(), model.ExpectedResidenceHistoryVersion), ct);
         if (result.IsFailure)
         {
             ModelState.AddModelError(string.Empty, result.Error!);
             return PartialView("Partials/_DeleteResidenceModal", model);
         }
 
-        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId }) });
+        return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId, section = ApplicationWizardSection.ResidenceHistory }) });
+    }
+
+    [Authorize(Roles = AppRoles.Applicant)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddCoApplicant(int id, string? email, CancellationToken ct)
+    {
+        var detail = await GetDetailAsync(id, ct);
+        if (detail is null)
+            return NotFound();
+        if (!detail.CanEdit)
+            return Forbid();
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            TempData["Error"] = "Enter an applicant email.";
+            return RedirectToAction(nameof(Wizard), new { id, section = ApplicationWizardSection.Summary });
+        }
+
+        var target = await _userManager.FindByEmailAsync(email.Trim());
+        if (target is null || !await _userManager.IsInRoleAsync(target, AppRoles.Applicant))
+        {
+            TempData["Error"] = "No applicant account was found for that email.";
+            return RedirectToAction(nameof(Wizard), new { id, section = ApplicationWizardSection.Summary });
+        }
+
+        var result = await _commands.AddCoApplicantAsync(
+            new AddCoApplicantCommand(id, User.GetUserId(), target.Id), ct);
+        TempData[result.IsSuccess ? "Success" : "Error"] = result.IsSuccess
+            ? "Co-applicant added."
+            : result.Error;
+        return RedirectToAction(nameof(Wizard), new { id, section = ApplicationWizardSection.Summary });
+    }
+
+    [Authorize(Roles = AppRoles.Applicant)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveCoApplicant(int id, string userId, CancellationToken ct)
+    {
+        var detail = await GetDetailAsync(id, ct);
+        if (detail is null)
+            return NotFound();
+        if (!detail.CanEdit)
+            return Forbid();
+
+        var result = await _commands.RemoveCoApplicantAsync(
+            new RemoveCoApplicantCommand(id, User.GetUserId(), userId), ct);
+        TempData[result.IsSuccess ? "Success" : "Error"] = result.IsSuccess
+            ? "Co-applicant removed."
+            : result.Error;
+        return RedirectToAction(nameof(Wizard), new { id, section = ApplicationWizardSection.Summary });
     }
 
     [Authorize(Roles = AppRoles.PropertyManager)]
@@ -479,6 +557,23 @@ public class ApplicationsController : Controller
 
     private Task<ApplicationDetailDto?> GetDetailAsync(int id, CancellationToken ct) =>
         _queries.GetAsync(id, User.GetUserId(), User.IsManager(), ct);
+
+    private async Task<ApplicationWizardViewModel> BuildWizardAsync(
+        ApplicationDetailDto detail,
+        bool isManager,
+        string currentUserId,
+        ApplicationWizardSection? requestedSection,
+        CancellationToken ct)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var member in detail.Members)
+        {
+            var user = await _userManager.FindByIdAsync(member.UserId);
+            names[member.UserId] = user?.FullName ?? member.UserId;
+        }
+
+        return ApplicationWizardViewModel.From(detail, isManager, currentUserId, requestedSection, names);
+    }
 
     private void AddFieldErrors(IReadOnlyDictionary<string, string[]> fieldErrors)
     {
