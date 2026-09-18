@@ -1,4 +1,5 @@
 using RentalApp.Application.Applications;
+using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
 using RentalApp.Domain.Enums;
 
@@ -43,7 +44,7 @@ internal sealed class ApplicationRepositoryFake : IRentalApplicationRepository
     public void AddStatusHistory(ApplicationStatusHistory history) => History.Add(history);
     public Task SaveChangesAsync(CancellationToken ct = default) { SaveCount++; return Task.CompletedTask; }
 
-    public Task<IReadOnlyList<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => throw new NotSupportedException();
     public void AddLease(Lease lease) => throw new NotSupportedException();
     public Task<IApplicationTransaction> BeginSerializableAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public bool IsSerializationFailure(Exception exception) => false;

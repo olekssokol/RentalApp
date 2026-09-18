@@ -25,5 +25,6 @@ public class RentalApplication : Entity
 
     public ICollection<ResidenceHistory> Residences { get; set; } = new List<ResidenceHistory>();
     public ICollection<ApplicationStatusHistory> StatusHistory { get; set; } = new List<ApplicationStatusHistory>();
+    public ICollection<PropertyManagerNote> PropertyManagerNotes { get; set; } = new List<PropertyManagerNote>();
     public Lease? Lease { get; set; }
 }

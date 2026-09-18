@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using RentalApp.Application.Applications;
 using RentalApp.Domain.Entities;
 using RentalApp.Infrastructure.Identity;
 
@@ -18,6 +19,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ResidenceHistory> ResidenceHistories => Set<ResidenceHistory>();
     public DbSet<ApplicationStatusHistory> ApplicationStatusHistories => Set<ApplicationStatusHistory>();
     public DbSet<Lease> Leases => Set<Lease>();
+    public DbSet<PropertyManagerNote> PropertyManagerNotes => Set<PropertyManagerNote>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -73,6 +75,16 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.ChangedByDisplayName).HasMaxLength(200).IsRequired();
             e.Property(x => x.Comment).HasMaxLength(2000);
             e.HasOne(x => x.RentalApplication).WithMany(a => a.StatusHistory).HasForeignKey(x => x.RentalApplicationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<PropertyManagerNote>(e =>
+        {
+            e.Property(x => x.AuthorUserId).HasMaxLength(450).IsRequired();
+            e.Property(x => x.AuthorDisplayName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Text).HasMaxLength(PropertyManagerNoteService.MaxTextLength).IsRequired();
+            e.HasOne(x => x.RentalApplication).WithMany(a => a.PropertyManagerNotes)
+                .HasForeignKey(x => x.RentalApplicationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.RentalApplicationId, x.UpdatedAtUtc });
         });
 
         builder.Entity<Lease>(e =>

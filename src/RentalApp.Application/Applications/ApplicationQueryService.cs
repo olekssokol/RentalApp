@@ -1,3 +1,5 @@
+using RentalApp.Application.Common;
+
 namespace RentalApp.Application.Applications;
 
 public class ApplicationQueryService : IApplicationQueryService
@@ -18,6 +20,6 @@ public class ApplicationQueryService : IApplicationQueryService
         return ApplicationMapper.ToDetail(application);
     }
 
-    public Task<IReadOnlyList<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) =>
+    public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) =>
         _applications.ListAsync(query, ct);
 }

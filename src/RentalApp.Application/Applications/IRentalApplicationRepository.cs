@@ -1,3 +1,4 @@
+using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
 
 namespace RentalApp.Application.Applications;
@@ -5,7 +6,7 @@ namespace RentalApp.Application.Applications;
 public interface IRentalApplicationRepository
 {
     Task<RentalApplication?> GetDetailAsync(int id, CancellationToken ct = default);
-    Task<IReadOnlyList<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default);
+    Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default);
     Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default);
     Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default);

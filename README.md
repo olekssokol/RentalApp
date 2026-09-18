@@ -50,6 +50,10 @@ dotnet run --project src/RentalApp.Web/RentalApp.Web.csproj
 
 The app uses LocalDB (`RentalAppDb`) and seeds demo data on startup.
 
+The application list is loaded from `GET /api/applications/grid`. The endpoint applies role visibility, filters, sorting, and paging in SQL and returns the current rows plus `filteredTotal`. Interactive API documentation is available at `/swagger` while the app is running.
+
+Property Manager application details include private, editable manager notes. Their endpoints require the Property Manager role, and applicant-facing application contracts do not contain note data.
+
 Demo password: `Passw0rd!`
 
 - Property managers: `pm1@rental.local`, `pm2@rental.local`

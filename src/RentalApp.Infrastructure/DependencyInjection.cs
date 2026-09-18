@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,11 +40,23 @@ public static class DependencyInjection
         {
             options.LoginPath = "/Account/Login";
             options.AccessDeniedPath = "/Account/AccessDenied";
+            options.Events.OnRedirectToLogin = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
         });
 
         services.AddScoped<IPropertyRepository, PropertyRepository>();
         services.AddScoped<IUnitRepository, UnitRepository>();
         services.AddScoped<IRentalApplicationRepository, RentalApplicationRepository>();
+        services.AddScoped<IPropertyManagerNoteRepository, PropertyManagerNoteRepository>();
 
         return services;
     }

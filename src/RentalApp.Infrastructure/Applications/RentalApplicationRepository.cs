@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using RentalApp.Application.Applications;
+using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
 using RentalApp.Infrastructure.Persistence;
 
@@ -22,7 +23,7 @@ public class RentalApplicationRepository : IRentalApplicationRepository
             .Include(a => a.StatusHistory)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 
-    public async Task<IReadOnlyList<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default)
+    public async Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default)
     {
         var applications = _db.RentalApplications
             .AsNoTracking()
@@ -38,8 +39,32 @@ public class RentalApplicationRepository : IRentalApplicationRepository
         if (query.PropertyId.HasValue)
             applications = applications.Where(a => a.Unit.PropertyId == query.PropertyId.Value);
 
-        return await applications
-            .OrderByDescending(a => a.UpdatedAtUtc)
+        var filteredTotal = await applications.CountAsync(ct);
+        var descending = query.NormalizedDirection == ApplicationSortDirection.Descending;
+        var ordered = query.NormalizedSort switch
+        {
+            ApplicationSortField.Applicant => descending
+                ? applications.OrderByDescending(a => a.FullName).ThenByDescending(a => a.Id)
+                : applications.OrderBy(a => a.FullName).ThenBy(a => a.Id),
+            ApplicationSortField.Property => descending
+                ? applications.OrderByDescending(a => a.Unit.Property.Name).ThenByDescending(a => a.Id)
+                : applications.OrderBy(a => a.Unit.Property.Name).ThenBy(a => a.Id),
+            ApplicationSortField.Unit => descending
+                ? applications.OrderByDescending(a => a.Unit.UnitNumber).ThenByDescending(a => a.Id)
+                : applications.OrderBy(a => a.Unit.UnitNumber).ThenBy(a => a.Id),
+            ApplicationSortField.Status => descending
+                ? applications.OrderByDescending(a => a.Status).ThenByDescending(a => a.Id)
+                : applications.OrderBy(a => a.Status).ThenBy(a => a.Id),
+            _ => descending
+                ? applications.OrderByDescending(a => a.UpdatedAtUtc).ThenByDescending(a => a.Id)
+                : applications.OrderBy(a => a.UpdatedAtUtc).ThenBy(a => a.Id)
+        };
+        var pageSize = query.NormalizedPageSize;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(filteredTotal / (double)pageSize));
+        var page = Math.Min(query.NormalizedPage, totalPages);
+        var items = await ordered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(a => new ApplicationListItemDto(
                 a.Id,
                 a.Status,
@@ -49,6 +74,8 @@ public class RentalApplicationRepository : IRentalApplicationRepository
                 a.UpdatedAtUtc,
                 a.Unit.PropertyId))
             .ToListAsync(ct);
+
+        return new PagedResult<ApplicationListItemDto>(items, filteredTotal, page, pageSize);
     }
 
     public Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default) =>

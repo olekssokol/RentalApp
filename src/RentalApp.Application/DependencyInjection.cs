@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitService, UnitService>();
         services.AddScoped<IApplicationQueryService, ApplicationQueryService>();
         services.AddScoped<IApplicationCommandService, ApplicationCommandService>();
+        services.AddScoped<IPropertyManagerNoteService, PropertyManagerNoteService>();
         return services;
     }
 }

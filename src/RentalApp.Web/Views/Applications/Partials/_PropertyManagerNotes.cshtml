@@ -1,0 +1,37 @@
+@model PropertyManagerNotesViewModel
+
+<div class="app-card manager-notes-card">
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <p class="page-kicker mb-1">Internal</p>
+            <h2 class="h5 mb-0">Property Manager Notes</h2>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary"
+                data-modal-url="@Url.Action("ManagerNoteModal", "Applications", new { applicationId = Model.ApplicationId })">
+            Add note
+        </button>
+    </div>
+    @if (Model.Items.Count == 0)
+    {
+        <p class="mb-0 text-muted">No internal notes yet.</p>
+    }
+    else
+    {
+        <ol class="manager-notes-list">
+            @foreach (var note in Model.Items)
+            {
+                <li>
+                    <div class="d-flex justify-content-between gap-3 flex-wrap">
+                        <strong>@note.AuthorDisplayName</strong>
+                        <span class="text-muted">@note.UpdatedAtUtc.ToLocalTime().ToString("g")</span>
+                    </div>
+                    <p>@note.Text</p>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            data-modal-url="@Url.Action("ManagerNoteModal", "Applications", new { applicationId = Model.ApplicationId, id = note.Id })">
+                        Edit
+                    </button>
+                </li>
+            }
+        </ol>
+    }
+</div>

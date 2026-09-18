@@ -113,6 +113,13 @@
     </div>
 }
 
+@if (Model.IsManager && ViewData["PropertyManagerNotes"] is PropertyManagerNotesViewModel managerNotes)
+{
+    <div id="property-manager-notes" class="mt-3">
+        <partial name="Partials/_PropertyManagerNotes" model="managerNotes" />
+    </div>
+}
+
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
 }

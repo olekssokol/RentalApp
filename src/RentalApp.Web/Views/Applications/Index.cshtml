@@ -1,6 +1,16 @@
 @model ApplicationListViewModel
 @{
     ViewData["Title"] = "Applications";
+    var grid = new ApplicationGridViewModel
+    {
+        Status = Model.Status,
+        PropertyId = Model.PropertyId,
+        Page = Model.Page,
+        PageSize = Model.PageSize,
+        Sort = Model.Sort,
+        Direction = Model.Direction,
+        IsManager = Model.IsManager
+    };
 }
 
 <div class="page-header">
@@ -11,7 +21,7 @@
     </div>
 </div>
 
-<form method="get" class="app-card mb-3">
+<form method="get" class="app-card mb-3" data-application-grid-filters>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
             <label class="form-label" for="status">Status</label>
@@ -19,14 +29,7 @@
                 <option value="">All statuses</option>
                 @foreach (ApplicationStatus s in Enum.GetValues<ApplicationStatus>())
                 {
-                    if (Model.Status == s)
-                    {
-                        <option value="@s" selected>@s</option>
-                    }
-                    else
-                    {
-                        <option value="@s">@s</option>
-                    }
+                    <option value="@s" selected="@(Model.Status == s)">@s</option>
                 }
             </select>
         </div>
@@ -36,71 +39,24 @@
                 <option value="">All properties</option>
                 @foreach (var p in Model.Properties)
                 {
-                    if (Model.PropertyId?.ToString() == p.Value)
-                    {
-                        <option value="@p.Value" selected>@p.Text</option>
-                    }
-                    else
-                    {
-                        <option value="@p.Value">@p.Text</option>
-                    }
+                    <option value="@p.Value" selected="@(Model.PropertyId?.ToString() == p.Value)">@p.Text</option>
                 }
             </select>
         </div>
-        <div class="col-md-4 d-flex gap-2">
-            <button type="submit" class="btn btn-primary">Filter</button>
+        <div class="col-md-2">
+            <label class="form-label" for="pageSize">Rows</label>
+            <select id="pageSize" name="pageSize" class="form-select">
+                @foreach (var size in new[] { 10, 20, 50 })
+                {
+                    <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Apply</button>
             <a class="btn btn-outline-secondary" asp-action="Index">Clear</a>
         </div>
     </div>
 </form>
 
-<div class="app-card p-0 overflow-hidden">
-    @if (Model.Items.Count == 0)
-    {
-        <div class="empty-state">
-            <strong>No applications match</strong>
-            @(Model.IsManager ? "Try another status or property." : "Browse available units to start one.")
-        </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table mb-0">
-                <thead>
-                    <tr>
-                        <th>File</th>
-                        <th>Applicant</th>
-                        <th>Home</th>
-                        <th>Status</th>
-                        <th>Updated</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var item in Model.Items)
-                {
-                    <tr>
-                        <td class="row-title">#@item.Id</td>
-                        <td>@item.ApplicantName</td>
-                        <td>
-                            <span>@item.PropertyName</span>
-                            <span class="row-sub">Unit @item.UnitNumber</span>
-                        </td>
-                        <td>@await Component.InvokeAsync("StatusBadge", new { status = item.Status })</td>
-                        <td>@item.UpdatedAtUtc.ToLocalTime().ToString("g")</td>
-                        <td>
-                            <div class="table-actions">
-                                <a class="btn btn-sm btn-outline-primary" asp-action="Wizard" asp-route-id="@item.Id">Open</a>
-                                @if (Model.IsManager && item.Status == ApplicationStatus.Submitted)
-                                {
-                                    <button type="button" class="btn btn-sm btn-primary" data-modal-url="@Url.Action("ReviewModal", new { id = item.Id })">Review</button>
-                                }
-                            </div>
-                        </td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </div>
-    }
-</div>
+@await Component.InvokeAsync("ApplicationGrid", new { model = grid })

@@ -1,4 +1,5 @@
 using RentalApp.Application.Applications;
+using RentalApp.Application.Common;
 using RentalApp.Domain.Entities;
 
 namespace RentalApp.IntegrationTests.Support;
@@ -17,7 +18,7 @@ internal sealed class BarrierApplicationRepository : IRentalApplicationRepositor
     }
 
     public Task<RentalApplication?> GetDetailAsync(int id, CancellationToken ct = default) => _inner.GetDetailAsync(id, ct);
-    public Task<IReadOnlyList<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => _inner.ListAsync(query, ct);
+    public Task<PagedResult<ApplicationListItemDto>> ListAsync(ApplicationListQuery query, CancellationToken ct = default) => _inner.ListAsync(query, ct);
     public Task<RentalApplication?> GetByIdAsync(int id, CancellationToken ct = default) => _inner.GetByIdAsync(id, ct);
     public Task<RentalApplication?> GetWithResidencesAsync(int id, CancellationToken ct = default) => _inner.GetWithResidencesAsync(id, ct);
     public async Task<RentalApplication?> GetWithUnitLeasesAsync(int id, CancellationToken ct = default)

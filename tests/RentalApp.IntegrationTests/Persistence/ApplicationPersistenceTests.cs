@@ -27,10 +27,61 @@ public class ApplicationPersistenceTests
         var property = await repository.ListAsync(new("manager", true, null, graph.SecondPropertyId));
         var combined = await repository.ListAsync(new("alice", false, ApplicationStatus.Submitted, graph.FirstPropertyId));
 
-        Assert.Equal(graph.ApplicationIds[..3].Order(), own.Select(x => x.Id).Order());
-        Assert.Equal(graph.ApplicationIds[1..4].Order(), status.Select(x => x.Id).Order());
-        Assert.Equal(new[] { graph.ApplicationIds[2], graph.ApplicationIds[4] }.Order(), property.Select(x => x.Id).Order());
-        Assert.Equal(new[] { graph.ApplicationIds[1] }, combined.Select(x => x.Id));
+        Assert.Equal(3, own.FilteredTotal);
+        Assert.Equal(graph.ApplicationIds[..3].Order(), own.Items.Select(x => x.Id).Order());
+        Assert.Equal(3, status.FilteredTotal);
+        Assert.Equal(graph.ApplicationIds[1..4].Order(), status.Items.Select(x => x.Id).Order());
+        Assert.Equal(2, property.FilteredTotal);
+        Assert.Equal(new[] { graph.ApplicationIds[2], graph.ApplicationIds[4] }.Order(), property.Items.Select(x => x.Id).Order());
+        Assert.Equal(1, combined.FilteredTotal);
+        Assert.Equal(new[] { graph.ApplicationIds[1] }, combined.Items.Select(x => x.Id));
+    }
+
+    [Fact]
+    public async Task ListAsync_SortAndPage_AreAppliedBeforeMaterializationAndKeepFilteredTotal()
+    {
+        await using var database = await SqlTestDatabase.CreateAsync();
+        var specs = Enumerable.Range(0, 12)
+            .Select(index => ($"user-{index:00}", ApplicationStatus.Draft, index % 2 + 1))
+            .ToArray();
+        await database.AddApplicationsAsync(specs);
+        await using var db = database.CreateContext();
+        var repository = new RentalApplicationRepository(db);
+
+        var result = await repository.ListAsync(new ApplicationListQuery(
+            "manager", true, null, null, Page: 2, PageSize: 10,
+            Sort: ApplicationSortField.Applicant, Direction: ApplicationSortDirection.Ascending));
+
+        Assert.Equal(12, result.FilteredTotal);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(new[] { "Applicant 8", "Applicant 9" }, result.Items.Select(item => item.ApplicantName));
+    }
+
+    [Fact]
+    public async Task PropertyManagerNotes_ArePersistedAndScopedToTheirApplication()
+    {
+        await using var database = await SqlTestDatabase.CreateAsync();
+        var graph = await database.AddApplicationsAsync(
+            ("alice", ApplicationStatus.Submitted, 1),
+            ("bob", ApplicationStatus.Submitted, 2));
+        await using (var db = database.CreateContext())
+        {
+            var service = new PropertyManagerNoteService(new PropertyManagerNoteRepository(db));
+            var added = await service.AddAsync(new AddPropertyManagerNoteCommand(
+                graph.ApplicationIds[0], "manager", "Pat Manager", "  Private review note  ", IsManager: true));
+            Assert.True(added.IsSuccess, added.Error);
+        }
+
+        await using var verification = database.CreateContext();
+        var repository = new PropertyManagerNoteRepository(verification);
+        var first = await repository.ListAsync(graph.ApplicationIds[0]);
+        var second = await repository.ListAsync(graph.ApplicationIds[1]);
+
+        var note = Assert.Single(first);
+        Assert.Equal("Private review note", note.Text);
+        Assert.Equal("Pat Manager", note.AuthorDisplayName);
+        Assert.Empty(second);
     }
 
     [Fact]

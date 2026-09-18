@@ -1,0 +1,40 @@
+@model ApplicationGridViewModel
+
+<div class="app-card p-0 overflow-hidden application-grid"
+     data-application-grid
+     data-endpoint="@Url.Action("Grid", "Applications")"
+     data-page="@Model.Page"
+     data-page-size="@Model.PageSize"
+     data-sort="@Model.Sort"
+     data-direction="@Model.Direction">
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th><button type="button" class="grid-sort" data-grid-sort="Applicant">Applicant</button></th>
+                    <th><button type="button" class="grid-sort" data-grid-sort="Property">Property</button></th>
+                    <th><button type="button" class="grid-sort" data-grid-sort="Unit">Unit</button></th>
+                    <th><button type="button" class="grid-sort" data-grid-sort="Status">Status</button></th>
+                    <th><button type="button" class="grid-sort" data-grid-sort="Updated">Updated</button></th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody data-grid-rows>
+                <tr><td colspan="7" class="text-center py-4 text-muted">Loading applications…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="grid-footer" data-grid-footer hidden>
+        <span data-grid-summary></span>
+        <nav aria-label="Application pages" class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-grid-previous>Previous</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-grid-next>Next</button>
+        </nav>
+    </div>
+    <div class="empty-state" data-grid-empty hidden>
+        <strong>No applications match</strong>
+        @(Model.IsManager ? "Try another status or property." : "Browse available units to start one.")
+    </div>
+    <div class="alert alert-danger m-3" data-grid-error hidden role="alert">Unable to load applications right now.</div>
+</div>

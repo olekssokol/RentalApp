@@ -16,32 +16,77 @@ public class ApplicationsController : Controller
 {
     private readonly IApplicationQueryService _queries;
     private readonly IApplicationCommandService _commands;
+    private readonly IPropertyManagerNoteService _notes;
     private readonly IPropertyService _properties;
 
     public ApplicationsController(
         IApplicationQueryService queries,
         IApplicationCommandService commands,
+        IPropertyManagerNoteService notes,
         IPropertyService properties)
     {
         _queries = queries;
         _commands = commands;
+        _notes = notes;
         _properties = properties;
     }
 
-    public async Task<IActionResult> Index(ApplicationStatus? status, int? propertyId, CancellationToken ct)
+    public async Task<IActionResult> Index(
+        ApplicationStatus? status,
+        int? propertyId,
+        int page = 1,
+        int pageSize = 10,
+        ApplicationSortField sort = ApplicationSortField.Updated,
+        ApplicationSortDirection direction = ApplicationSortDirection.Descending,
+        CancellationToken ct = default)
     {
         var isManager = User.IsManager();
-        var items = await _queries.ListAsync(new ApplicationListQuery(User.GetUserId(), isManager, status, propertyId), ct);
         var properties = await _properties.GetAllAsync(ct);
+        var query = new ApplicationListQuery(User.GetUserId(), isManager, status, propertyId, page, pageSize, sort, direction);
 
         return View(new ApplicationListViewModel
         {
             Status = status,
             PropertyId = propertyId,
-            Items = items,
             IsManager = isManager,
+            Page = query.NormalizedPage,
+            PageSize = query.NormalizedPageSize,
+            Sort = query.NormalizedSort,
+            Direction = query.NormalizedDirection,
             Properties = properties.Select(p => new SelectListItem(p.Name, p.Id.ToString(), propertyId == p.Id))
         });
+    }
+
+    /// <summary>Returns one database-filtered, sorted and paged application-grid page.</summary>
+    [HttpGet("/api/applications/grid")]
+    [Produces("application/json")]
+    [ProducesResponseType<ApplicationGridResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApplicationGridResponse>> Grid(
+        ApplicationStatus? status,
+        int? propertyId,
+        int page = 1,
+        int pageSize = 10,
+        ApplicationSortField sort = ApplicationSortField.Updated,
+        ApplicationSortDirection direction = ApplicationSortDirection.Descending,
+        CancellationToken ct = default)
+    {
+        var isManager = User.IsManager();
+        var result = await _queries.ListAsync(new ApplicationListQuery(
+            User.GetUserId(), isManager, status, propertyId, page, pageSize, sort, direction), ct);
+        var rows = result.Items.Select(item => new ApplicationGridRowResponse(
+            item.Id,
+            item.ApplicantName,
+            item.PropertyName,
+            item.UnitNumber,
+            item.Status.ToString(),
+            item.UpdatedAtUtc,
+            Url.Action(nameof(Wizard), new { id = item.Id })!,
+            isManager && item.Status == ApplicationStatus.Submitted
+                ? Url.Action(nameof(ReviewModal), new { id = item.Id })
+                : null)).ToList();
+
+        return Ok(new ApplicationGridResponse(rows, result.FilteredTotal, result.Page, result.PageSize));
     }
 
     [HttpGet]
@@ -51,7 +96,15 @@ public class ApplicationsController : Controller
         if (detail is null)
             return NotFound();
 
-        return View(ApplicationWizardViewModel.From(detail, User.IsManager(), section));
+        var isManager = User.IsManager();
+        if (isManager)
+        {
+            var notes = await _notes.ListAsync(id, isManager, ct);
+            if (notes.IsSuccess)
+                ViewData["PropertyManagerNotes"] = BuildNotesViewModel(id, notes.Value!);
+        }
+
+        return View(ApplicationWizardViewModel.From(detail, isManager, section));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -290,6 +343,77 @@ public class ApplicationsController : Controller
         return Ok(new { success = true, refreshUrl = Url.Action(nameof(Wizard), new { id = model.ApplicationId }) });
     }
 
+    [Authorize(Roles = AppRoles.PropertyManager)]
+    [HttpGet]
+    public async Task<IActionResult> ManagerNotes(int applicationId, CancellationToken ct)
+    {
+        var result = await _notes.ListAsync(applicationId, User.IsManager(), ct);
+        return result.IsFailure
+            ? NotFound()
+            : PartialView("Partials/_PropertyManagerNotes", BuildNotesViewModel(applicationId, result.Value!));
+    }
+
+    [Authorize(Roles = AppRoles.PropertyManager)]
+    [HttpGet]
+    public async Task<IActionResult> ManagerNoteModal(int applicationId, int? id, CancellationToken ct)
+    {
+        if (id is null)
+        {
+            var list = await _notes.ListAsync(applicationId, User.IsManager(), ct);
+            return list.IsFailure
+                ? NotFound()
+                : PartialView("Partials/_PropertyManagerNoteModal", new PropertyManagerNoteFormViewModel { ApplicationId = applicationId });
+        }
+
+        var result = await _notes.GetAsync(applicationId, id.Value, User.IsManager(), ct);
+        return result.IsFailure
+            ? NotFound()
+            : PartialView("Partials/_PropertyManagerNoteModal", new PropertyManagerNoteFormViewModel
+            {
+                ApplicationId = applicationId,
+                Id = result.Value!.Id,
+                Text = result.Value.Text
+            });
+    }
+
+    [Authorize(Roles = AppRoles.PropertyManager)]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ManagerNoteModal(PropertyManagerNoteFormViewModel model, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return PartialView("Partials/_PropertyManagerNoteModal", model);
+
+        Result result;
+        if (model.Id is null)
+        {
+            var add = await _notes.AddAsync(new AddPropertyManagerNoteCommand(
+                model.ApplicationId, User.GetUserId(), User.GetDisplayName(), model.Text, User.IsManager()), ct);
+            result = add.IsSuccess ? Result.Success() : Result.Failure(add.Error!);
+        }
+        else
+        {
+            result = await _notes.UpdateAsync(new UpdatePropertyManagerNoteCommand(
+                model.ApplicationId, model.Id.Value, model.Text, User.IsManager()), ct);
+        }
+
+        if (result.IsFailure)
+        {
+            ModelState.AddModelError(nameof(model.Text), result.Error!);
+            return PartialView("Partials/_PropertyManagerNoteModal", model);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            refreshTarget = "#property-manager-notes",
+            refreshUrl = Url.Action(nameof(ManagerNotes), new { applicationId = model.ApplicationId })
+        });
+    }
+
     private Task<ApplicationDetailDto?> GetDetailAsync(int id, CancellationToken ct) =>
         _queries.GetAsync(id, User.GetUserId(), User.IsManager(), ct);
+
+    private static PropertyManagerNotesViewModel BuildNotesViewModel(
+        int applicationId, IReadOnlyList<PropertyManagerNoteDto> notes) =>
+        new() { ApplicationId = applicationId, Items = notes };
 }

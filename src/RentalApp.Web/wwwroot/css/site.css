@@ -673,6 +673,55 @@ h1, h2, .display-6, .hero-title {
   flex-wrap: wrap;
 }
 
+.grid-sort {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+
+.grid-sort:hover,
+.grid-sort:focus-visible {
+  color: var(--hh-sea-deep);
+}
+
+.grid-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--hh-line);
+  color: var(--hh-ink-soft);
+}
+
+.manager-notes-card {
+  border-left: 4px solid var(--hh-gold);
+}
+
+.manager-notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.manager-notes-list li {
+  padding: 1rem 0;
+  border-top: 1px solid var(--hh-line);
+}
+
+.manager-notes-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.manager-notes-list p {
+  white-space: pre-wrap;
+  margin: 0.45rem 0 0.7rem;
+}
+
 @media (max-width: 768px) {
   .hero,
   .dash-grid,
@@ -681,6 +730,11 @@ h1, h2, .display-6, .hero-title {
   .choice-grid-3,
   .wizard-steps {
     grid-template-columns: 1fr;
+  }
+
+  .grid-footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .page-header h1 {
